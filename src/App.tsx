@@ -17,8 +17,11 @@ function App() {
   const cursorRef = useRef<HTMLDivElement>(null)
   const narrativeRef = useRef<HTMLDivElement>(null)
   const scrollIndicatorRef = useRef<HTMLDivElement>(null)
+  
   const [hasInteracted, setHasInteracted] = useState(false)
   const [narrativeIndex, setNarrativeIndex] = useState(-1)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  
   const threeAppRef = useRef<ThreeJSApp | null>(null)
 
   const narrativeStates = [
@@ -74,8 +77,147 @@ function App() {
     }
   ]
 
+  // Simple advance function
+  const advanceNarrative = () => {
+    console.log('advanceNarrative called, current index:', narrativeIndex, 'isTransitioning:', isTransitioning)
+    
+    if (isTransitioning || narrativeIndex >= narrativeStates.length - 1) {
+      console.log('Blocked: transitioning or at end')
+      return
+    }
+    
+    setIsTransitioning(true)
+    const newIndex = narrativeIndex + 1
+    console.log('Advancing to index:', newIndex)
+    setNarrativeIndex(newIndex)
+    
+    // Update content
+    if (narrativeRef.current) {
+      narrativeRef.current.classList.remove('visible')
+      
+      setTimeout(() => {
+        const currentState = narrativeStates[newIndex]
+        let content = ''
+        if (currentState.title) {
+          const titleClass = newIndex === 0 ? "text-3xl md:text-4xl" : "text-2xl md:text-3xl"
+          content += `<h2 class="${titleClass} font-bold text-white mb-3">${currentState.title}</h2>`
+        }
+        content += `<p class="text-lg md:text-xl text-gray-300">${currentState.text}</p>`
+        
+        if (narrativeRef.current) {
+          narrativeRef.current.innerHTML = content
+          narrativeRef.current.classList.add('visible')
+        }
+        
+        // Switch Three.js scene
+        if (threeAppRef.current) {
+          threeAppRef.current.switchScene(currentState.state)
+        }
+        
+        setIsTransitioning(false)
+      }, 500)
+    } else {
+      setIsTransitioning(false)
+    }
+  }
+
+  // Reset function
+  const resetExperience = () => {
+    console.log('Resetting experience')
+    setNarrativeIndex(-1)
+    setHasInteracted(false)
+    setIsTransitioning(false)
+    
+    if (narrativeRef.current) {
+      narrativeRef.current.innerHTML = ''
+      narrativeRef.current.classList.remove('visible')
+    }
+    
+    if (scrollIndicatorRef.current) {
+      scrollIndicatorRef.current.style.opacity = '0'
+    }
+    
+    if (threeAppRef.current) {
+      threeAppRef.current.switchScene('quantum')
+    }
+  }
+
+  // Global event handlers
   useEffect(() => {
-    // Load Three.js
+    const handleKeyDown = (e: KeyboardEvent) => {
+      console.log('Global key:', e.key)
+      
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault()
+        resetExperience()
+        return
+      }
+      
+      if (e.key === ' ' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        
+        if (!hasInteracted) {
+          setHasInteracted(true)
+          setTimeout(() => {
+            advanceNarrative()
+            if (scrollIndicatorRef.current) {
+              scrollIndicatorRef.current.style.opacity = '1'
+            }
+          }, 500)
+        } else {
+          advanceNarrative()
+        }
+      }
+    }
+
+    const handleWheel = (e: WheelEvent) => {
+      if (!hasInteracted || e.deltaY <= 0) return
+      
+      console.log('Global wheel, advancing')
+      advanceNarrative()
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (cursorRef.current) {
+        cursorRef.current.style.left = `${e.clientX}px`
+        cursorRef.current.style.top = `${e.clientY}px`
+      }
+      
+      if (!hasInteracted) {
+        console.log('First interaction via mouse')
+        setHasInteracted(true)
+        setTimeout(() => {
+          advanceNarrative()
+          if (scrollIndicatorRef.current) {
+            scrollIndicatorRef.current.style.opacity = '1'
+          }
+        }, 500)
+      }
+    }
+
+    // Add throttling to wheel
+    let wheelTimeout: number | null = null
+    const throttledWheel = (e: WheelEvent) => {
+      if (wheelTimeout) return
+      wheelTimeout = window.setTimeout(() => {
+        handleWheel(e)
+        wheelTimeout = null
+      }, 300)
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('wheel', throttledWheel, { passive: true })
+    document.addEventListener('mousemove', handleMouseMove)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('wheel', throttledWheel)
+      document.removeEventListener('mousemove', handleMouseMove)
+    }
+  }, [hasInteracted, narrativeIndex, isTransitioning])
+
+  // Three.js initialization
+  useEffect(() => {
     const script = document.createElement('script')
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
     script.onload = () => {
@@ -94,149 +236,10 @@ function App() {
     }
   }, [])
 
-  const showNextLine = () => {
-    console.log('showNextLine called, current narrativeIndex:', narrativeIndex, 'max:', narrativeStates.length - 1)
-    
-    if (narrativeIndex >= narrativeStates.length - 1) {
-      console.log('Already at last narrative state')
-      return
-    }
-    
-    const newIndex = narrativeIndex + 1
-    console.log('Advancing to narrative index:', newIndex)
-    setNarrativeIndex(newIndex)
-    
-    if (narrativeRef.current) {
-      narrativeRef.current.classList.remove('visible')
-      setTimeout(() => {
-        const currentState = narrativeStates[newIndex]
-        console.log('Switching to state:', currentState.state)
-        let content = ''
-        if (currentState.title) {
-          const titleClass = newIndex === 0 ? "text-3xl md:text-4xl" : "text-2xl md:text-3xl"
-          content += `<h2 class="${titleClass} font-bold text-white mb-3">${currentState.title}</h2>`
-        }
-        content += `<p class="text-lg md:text-xl text-gray-300">${currentState.text}</p>`
-        narrativeRef.current!.innerHTML = content
-        narrativeRef.current!.classList.add('visible')
-        
-        // Switch scene through the Three.js app
-        if (threeAppRef.current && threeAppRef.current.switchScene) {
-          console.log('Switching Three.js scene to:', currentState.state)
-          threeAppRef.current.switchScene(currentState.state)
-        } else {
-          console.warn('Three.js app not ready for scene switching')
-        }
-      }, 500)
-    }
-  }
-
   const createThreeJSApp = (): ThreeJSApp => {
     let scene: any, camera: any, renderer: any
     let mouse = { x: 0, y: 0 }
     let animationState = 'quantum'
-    let audioCtx: AudioContext, noise: AudioBufferSourceNode, filter: BiquadFilterNode, noiseGain: GainNode, oscillator: OscillatorNode, oscGain: GainNode
-
-    const initAudio = async () => {
-      if (audioCtx) return
-      try {
-        audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
-        
-        // Resume the context if it's suspended
-        if (audioCtx.state === 'suspended') {
-          await audioCtx.resume()
-        }
-        
-        noise = audioCtx.createBufferSource()
-        const bufferSize = audioCtx.sampleRate * 2
-        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate)
-        const data = buffer.getChannelData(0)
-        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1
-        noise.buffer = buffer
-        noise.loop = true
-        
-        filter = audioCtx.createBiquadFilter()
-        filter.type = 'lowpass'
-        filter.frequency.value = 20000
-        noiseGain = audioCtx.createGain()
-        noiseGain.gain.value = 0
-
-        oscillator = audioCtx.createOscillator()
-        oscillator.type = 'sine'
-        oscillator.frequency.value = 150
-        oscGain = audioCtx.createGain()
-        oscGain.gain.value = 0
-
-        noise.connect(filter).connect(noiseGain).connect(audioCtx.destination)
-        oscillator.connect(oscGain).connect(audioCtx.destination)
-        noise.start(0)
-        oscillator.start(0)
-      } catch (e) {
-        console.warn("Web Audio API not supported:", e)
-      }
-    }
-
-    const switchScene = (state: string) => {
-      if (animationState === state) return
-      animationState = state
-      while(scene.children.length > 0) scene.remove(scene.children[0])
-      const objects = sceneInitializers[state]()
-      objects.forEach((obj: any) => scene.add(obj))
-
-      if (!audioCtx) return
-      const now = audioCtx.currentTime
-      noiseGain.gain.cancelScheduledValues(now)
-      oscGain.gain.cancelScheduledValues(now)
-      filter.frequency.cancelScheduledValues(now)
-      
-      switch(state) {
-        case 'quantum':
-          noiseGain.gain.setTargetAtTime(0.01, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.02, now, 0.5)
-          filter.frequency.setTargetAtTime(200, now, 0.5)
-          break
-        case 'pixels':
-          noiseGain.gain.setTargetAtTime(0.01, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.0, now, 0.5)
-          filter.frequency.setTargetAtTime(800, now, 0.5)
-          break
-        case 'coordinates':
-          noiseGain.gain.setTargetAtTime(0.02, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.05, now, 0.5)
-          filter.frequency.setTargetAtTime(500, now, 0.5)
-          break
-        case 'scale':
-          noiseGain.gain.setTargetAtTime(0.01, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.1, now, 0.5)
-          break
-        case 'infinite':
-          noiseGain.gain.setTargetAtTime(0.15, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.0, now, 0.5)
-          filter.frequency.setTargetAtTime(10000, now, 0.5)
-          break
-        case 'library':
-          noiseGain.gain.setTargetAtTime(0.03, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.2, now, 0.5)
-          break
-        case 'noise':
-          noiseGain.gain.setTargetAtTime(0.2, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.15, now, 0.5)
-          filter.frequency.setTargetAtTime(15000, now, 0.5)
-          break
-        case 'time':
-          noiseGain.gain.setTargetAtTime(0.1, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.1, now, 0.5)
-          break
-        case 'navigation':
-          noiseGain.gain.setTargetAtTime(0.05, now, 0.5)
-          oscGain.gain.setTargetAtTime(0.15, now, 0.5)
-          break
-        case 'sublime':
-          noiseGain.gain.setTargetAtTime(0, now, 1.0)
-          oscGain.gain.setTargetAtTime(0, now, 1.0)
-          break
-      }
-    }
 
     const sceneInitializers: { [key: string]: () => any[] } = {
       'quantum': () => {
@@ -485,6 +488,15 @@ function App() {
       }
     }
 
+    const switchScene = (state: string) => {
+      console.log('Switching Three.js scene to:', state)
+      if (animationState === state) return
+      animationState = state
+      while(scene.children.length > 0) scene.remove(scene.children[0])
+      const objects = sceneInitializers[state]()
+      objects.forEach((obj: any) => scene.add(obj))
+    }
+
     const animate = () => {
       requestAnimationFrame(animate)
       const objects = scene.children
@@ -493,21 +505,11 @@ function App() {
       scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.02
       scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.02
 
-      // Animate based on current state
+      // Simple animations
       switch(animationState) {
         case 'quantum':
           if (objects[0]) {
             objects[0].rotation.y += 0.0005
-            const positions = objects[0].geometry.attributes.position
-            const time = Date.now() * 0.0005
-            for (let i = 0; i < positions.count; i++) {
-              const i3 = i * 3
-              const x = positions.array[i3]
-              const y = positions.array[i3+1]
-              positions.array[i3] += Math.sin(time + y) * 0.001
-              positions.array[i3+1] += Math.cos(time + x) * 0.001
-            }
-            positions.needsUpdate = true
           }
           break
         case 'pixels':
@@ -522,18 +524,6 @@ function App() {
             objects[0].rotation.x += 0.0001
           }
           break
-        case 'noise':
-          if (objects[0]) {
-            const positions = objects[0].geometry.attributes.position
-            for (let i = 0; i < positions.count; i++) {
-              const i3 = i * 3
-              positions.array[i3] += (Math.random() - 0.5) * 0.01
-              positions.array[i3+1] += (Math.random() - 0.5) * 0.01
-              positions.array[i3+2] += (Math.random() - 0.5) * 0.01
-            }
-            positions.needsUpdate = true
-          }
-          break
         case 'navigation':
           if (objects[0]) {
             objects[0].rotation.z += 0.005
@@ -543,8 +533,6 @@ function App() {
 
       renderer.render(scene, camera)
     }
-
-
 
     return {
       init: () => {
@@ -556,56 +544,10 @@ function App() {
         renderer = new window.THREE.WebGLRenderer({ canvas: canvasRef.current })
         renderer.setSize(window.innerWidth, window.innerHeight)
 
-        // Initialize with quantum state
-        const initialObjects = sceneInitializers.quantum()
-        initialObjects.forEach(obj => scene.add(obj))
-
-        // Mouse tracking
+        // Mouse tracking for 3D rotation
         const handleMouseMove = (e: MouseEvent) => {
-          if (cursorRef.current) {
-            cursorRef.current.style.left = `${e.clientX}px`
-            cursorRef.current.style.top = `${e.clientY}px`
-          }
           mouse.x = (e.clientX / window.innerWidth) * 2 - 1
           mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
-          
-          if (!hasInteracted) {
-            setHasInteracted(true)
-            // Initialize audio after user gesture
-            initAudio().then(() => {
-              console.log('Audio initialized successfully')
-            }).catch(err => {
-              console.warn('Audio initialization failed:', err)
-            })
-            
-            setTimeout(() => {
-              showNextLine()
-              if (scrollIndicatorRef.current) {
-                scrollIndicatorRef.current.style.opacity = '1'
-              }
-            }, 500)
-          }
-        }
-
-        let scrollTimeout: number | null = null
-        const handleWheel = (e: WheelEvent) => {
-          console.log('Wheel event:', { hasInteracted, narrativeIndex, deltaY: e.deltaY })
-          
-          if (!hasInteracted) return
-          
-          // Prevent multiple rapid scroll events
-          if (scrollTimeout) {
-            console.log('Scroll blocked by timeout')
-            return
-          }
-          
-          if (e.deltaY > 0) {
-            console.log('Scrolling down, advancing narrative')
-            scrollTimeout = window.setTimeout(() => {
-              showNextLine()
-              scrollTimeout = null
-            }, 300)
-          }
         }
 
         const handleResize = () => {
@@ -614,56 +556,27 @@ function App() {
           renderer.setSize(window.innerWidth, window.innerHeight)
         }
 
-        // Keyboard alternative for testing
-        const handleKeyDown = (e: KeyboardEvent) => {
-          console.log('Key pressed:', e.key)
-          if (e.key === ' ' || e.key === 'ArrowDown') {
-            e.preventDefault()
-            if (!hasInteracted) {
-              setHasInteracted(true)
-              initAudio().then(() => {
-                console.log('Audio initialized via keyboard')
-              }).catch(err => {
-                console.warn('Audio initialization failed via keyboard:', err)
-              })
-              
-              setTimeout(() => {
-                showNextLine()
-                if (scrollIndicatorRef.current) {
-                  scrollIndicatorRef.current.style.opacity = '1'
-                }
-              }, 500)
-            } else {
-              showNextLine()
-            }
-          }
-        }
-
         window.addEventListener('mousemove', handleMouseMove)
-        window.addEventListener('wheel', handleWheel, { passive: true })
-        window.addEventListener('keydown', handleKeyDown)
         window.addEventListener('resize', handleResize)
+
+        // Initialize with quantum state
+        const initialObjects = sceneInitializers.quantum()
+        initialObjects.forEach(obj => scene.add(obj))
 
         animate()
 
-        // Store event handlers for cleanup
-        ;(window as any).threeEventHandlers = {
-          handleMouseMove,
-          handleWheel,
-          handleKeyDown,
-          handleResize
+        // Store for cleanup
+        ;(window as any).threeCleanup = () => {
+          window.removeEventListener('mousemove', handleMouseMove)
+          window.removeEventListener('resize', handleResize)
         }
       },
 
       switchScene: switchScene,
 
       cleanup: () => {
-        const handlers = (window as any).threeEventHandlers
-        if (handlers) {
-          window.removeEventListener('mousemove', handlers.handleMouseMove)
-          window.removeEventListener('wheel', handlers.handleWheel)
-          window.removeEventListener('keydown', handlers.handleKeyDown)
-          window.removeEventListener('resize', handlers.handleResize)
+        if ((window as any).threeCleanup) {
+          ;(window as any).threeCleanup()
         }
       }
     }
@@ -681,6 +594,15 @@ function App() {
       <div className="fixed top-0 left-0 w-full h-full z-20 pointer-events-none flex flex-col justify-between p-8">
         <header>
           <h1 className="text-2xl font-bold text-white tracking-wider">TOTAL PIXEL SPACE</h1>
+          <div className="mt-4 text-xs text-gray-500 pointer-events-auto">
+            <div>Index: {narrativeIndex} | Interacted: {hasInteracted.toString()}</div>
+            <button 
+              onClick={resetExperience}
+              className="mt-2 px-3 py-1 bg-gray-800 text-white rounded text-xs hover:bg-gray-700"
+            >
+              Reset (R)
+            </button>
+          </div>
         </header>
         
         <footer className="text-center">
@@ -711,7 +633,7 @@ function App() {
               </svg>
             </div>
             <div className="text-xs text-gray-500">
-              Scroll or press Space/↓ to continue
+              Scroll or press Space/↓ to continue | R to reset
             </div>
           </div>
         </footer>
