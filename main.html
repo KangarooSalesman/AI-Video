@@ -117,7 +117,7 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         const mouse = new THREE.Vector2();
         let hasInteracted = false;
-        let animationState = 'initial';
+        let animationState = 'quantum';
 
         // --- Web Audio API Setup ---
         let audioCtx, noise, filter, noiseGain, oscillator, oscGain;
@@ -154,6 +154,16 @@
         
         // --- Narrative & State Control ---
         const narrativeStates = [
+            {
+                title: "How many images can possibly exist?",
+                text: "What lies in the space between Order and Chaos?",
+                state: 'quantum'
+            },
+            {
+                title: "The Building Blocks",
+                text: "Every digital image is a mosaic of pixels. Each pixel is a set of numbers defining its color and position. This entire screen is a grid of numbers, constantly changing.",
+                state: 'intro'
+            },
             {
                 title: "A Pre-existing Universe",
                 text: "Every possible image exists as coordinates in an abstract space. Every frame of every film, every face, every dream – already mapped.",
@@ -203,6 +213,16 @@
             filter.frequency.cancelScheduledValues(now);
             
             switch(state) {
+                case 'quantum':
+                    noiseGain.gain.setTargetAtTime(0.01, now, 0.5);
+                    oscGain.gain.setTargetAtTime(0.02, now, 0.5);
+                    filter.frequency.setTargetAtTime(200, now, 0.5);
+                    break;
+                case 'intro':
+                    noiseGain.gain.setTargetAtTime(0.01, now, 0.5);
+                    oscGain.gain.setTargetAtTime(0.0, now, 0.5);
+                    filter.frequency.setTargetAtTime(800, now, 0.5);
+                    break;
                 case 'initial':
                     noiseGain.gain.setTargetAtTime(0.02, now, 0.5);
                     oscGain.gain.setTargetAtTime(0.05, now, 0.5);
@@ -230,7 +250,6 @@
                 case 'creation':
                     noiseGain.gain.setTargetAtTime(0, now, 1.0);
                     oscGain.gain.setTargetAtTime(0, now, 1.0);
-                    // Play a pleasant chord on creation
                     const finalOsc = audioCtx.createOscillator();
                     finalOsc.type = 'sine';
                     finalOsc.frequency.value = 330;
@@ -252,7 +271,8 @@
                     const currentState = narrativeStates[narrativeIndex];
                     let content = '';
                     if (currentState.title) {
-                        content += `<h2 class="text-2xl md:text-3xl font-bold text-white mb-3">${currentState.title}</h2>`;
+                        const titleClass = narrativeIndex === 0 ? "text-3xl md:text-4xl" : "text-2xl md:text-3xl";
+                        content += `<h2 class="${titleClass} font-bold text-white mb-3">${currentState.title}</h2>`;
                     }
                     if(narrativeIndex === narrativeStates.length - 1) {
                         content += `<div class="text-xl md:text-2xl">${currentState.text}</div>`;
@@ -298,7 +318,6 @@
         
         // --- Simplex Noise function for generative art ---
         const SimplexNoise = (function() {
-            // This is a standard implementation of Simplex Noise.
             const F2 = 0.5 * (Math.sqrt(3.0) - 1.0), G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
             const F3 = 1.0 / 3.0, G3 = 1.0 / 6.0;
             const grad3 = new Float32Array([1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1, 0, 1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, -1, 0, 1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1]);
@@ -352,96 +371,126 @@
             };
         })();
 
+        let introCanvas, introCtx, introTexture;
+        let columns, rows;
+        const chars = '0123456789';
+        const fontSize = 16;
+        
+        function setupIntroTexture() {
+            columns = Math.floor(window.innerWidth / fontSize);
+            rows = Math.floor(window.innerHeight / fontSize);
+            introCanvas = document.createElement('canvas');
+            introCanvas.width = window.innerWidth;
+            introCanvas.height = window.innerHeight;
+            introCtx = introCanvas.getContext('2d');
+            introCtx.font = `${fontSize}px monospace`;
+            introCtx.textAlign = 'center';
+            introCtx.textBaseline = 'middle';
+            
+            introCtx.fillStyle = '#000000';
+            introCtx.fillRect(0, 0, introCanvas.width, introCanvas.height);
+            
+            introTexture = new THREE.CanvasTexture(introCanvas);
+        }
+
 
         // --- Three.js Scene Definitions ---
         const sceneInitializers = {
+            'quantum': () => {
+                const count = 30000;
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(count * 3);
+                const data = new Float32Array(count * 4); // x, y, z, original radius
+                
+                const group = new THREE.Group();
+
+                // Head Sphere
+                const headRadius = 2.5;
+                for (let i = 0; i < count * 0.7; i++) {
+                    const i3 = i*3;
+                    const i4 = i*4;
+                    const phi = Math.acos(-1 + (2 * i) / (count * 0.7));
+                    const theta = Math.sqrt((count * 0.7) * Math.PI) * phi;
+                    positions[i3] = headRadius * Math.cos(theta) * Math.sin(phi);
+                    positions[i3+1] = headRadius * Math.sin(theta) * Math.sin(phi) + 1.0;
+                    positions[i3+2] = headRadius * Math.cos(phi);
+                }
+
+                // Shoulders/Torso
+                 for (let i = Math.floor(count * 0.7); i < count; i++) {
+                    const i3 = i * 3;
+                    positions[i3] = (Math.random() - 0.5) * 6;
+                    positions[i3+1] = (Math.random() - 0.5) * 3 - 2.5;
+                    positions[i3+2] = (Math.random() - 0.5) * 4;
+                }
+
+
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const material = new THREE.PointsMaterial({ color: 0xddddff, size: 0.03, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending });
+                const points = new THREE.Points(geometry, material);
+                return [points];
+            },
+            'intro': () => {
+                const vFOV = THREE.MathUtils.degToRad(camera.fov);
+                const height = 2 * Math.tan(vFOV / 2) * camera.position.z;
+                const width = height * camera.aspect;
+                const geometry = new THREE.PlaneGeometry(width, height);
+                const material = new THREE.MeshBasicMaterial({ map: introTexture, transparent: true, opacity: 0.8 });
+                const plane = new THREE.Mesh(geometry, material);
+                return [plane];
+            },
             'initial': () => {
                 const lineCount = 15000;
                 const geometry = new THREE.BufferGeometry();
-                const positions = new Float32Array(lineCount * 2 * 3); // 2 vertices per line
-                const data = new Float32Array(lineCount * 3); // original position
+                const positions = new Float32Array(lineCount * 2 * 3);
+                const data = new Float32Array(lineCount * 3);
 
                 const centralRadius = 4;
-
                 for (let i = 0; i < lineCount; i++) {
-                    const i6 = i * 6;
-                    const i3 = i * 3;
-                    
+                    const i6 = i * 6, i3 = i * 3;
                     const radius = Math.random() * centralRadius;
                     const angle = Math.random() * Math.PI * 2;
-                    
                     const x = Math.cos(angle) * radius;
                     const y = Math.sin(angle) * radius;
-
-                    positions[i6] = x;
-                    positions[i6+1] = y;
-                    positions[i6+2] = 0;
-                    positions[i6+3] = x;
-                    positions[i6+4] = y;
-                    positions[i6+5] = 0;
-
-                    data[i3] = x;
-                    data[i3+1] = y;
-                    data[i3+2] = 0;
+                    positions[i6] = x; positions[i6+1] = y; positions[i6+2] = 0;
+                    positions[i6+3] = x; positions[i6+4] = y; positions[i6+5] = 0;
+                    data[i3] = x; data[i3+1] = y; data[i3+2] = 0;
                 }
-
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
                 geometry.setAttribute('data', new THREE.BufferAttribute(data, 3));
-
-                const material = new THREE.LineBasicMaterial({
-                    color: 0xffffff,
-                    transparent: true,
-                    opacity: 0.1,
-                    blending: THREE.AdditiveBlending
-                });
-                
-                const lines = new THREE.LineSegments(geometry, material);
-                return [lines];
+                const material = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending });
+                return [new THREE.LineSegments(geometry, material)];
             },
             'library': () => {
                 const geometry = new THREE.BufferGeometry();
-                const totalPoints = 100000;
-                const volumeSize = 50;
+                const totalPoints = 100000, volumeSize = 50;
                 const positions = new Float32Array(totalPoints * 3);
                 const colors = new Float32Array(totalPoints * 3);
 
                 for (let i = 0; i < totalPoints; i++) {
                     const i3 = i * 3;
-
                     const x = (Math.random() - 0.5) * volumeSize;
                     const y = (Math.random() - 0.5) * volumeSize;
                     const z = (Math.random() - 0.5) * volumeSize;
-
-                    positions[i3]     = x;
-                    positions[i3 + 1] = y;
-                    positions[i3 + 2] = z;
-
-                    colors[i3]     = (x / volumeSize) + 0.5;
-                    colors[i3 + 1] = (y / volumeSize) + 0.5;
-                    colors[i3 + 2] = (z / volumeSize) + 0.5;
+                    positions[i3] = x; positions[i3 + 1] = y; positions[i3 + 2] = z;
+                    colors[i3] = (x / volumeSize) + 0.5; colors[i3 + 1] = (y / volumeSize) + 0.5; colors[i3 + 2] = (z / volumeSize) + 0.5;
                 }
-
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
                 geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-                const material = new THREE.PointsMaterial({
-                    size: 0.05,
-                    vertexColors: true,
-                    blending: THREE.AdditiveBlending,
-                    transparent: true,
-                    opacity: 0.7
-                });
-                
-                const points = new THREE.Points(geometry, material);
-                return [points];
+                const material = new THREE.PointsMaterial({ size: 0.05, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.7 });
+                return [new THREE.Points(geometry, material)];
             },
             'noise': () => {
                 const geometry = new THREE.BufferGeometry();
-                const count = 100000;
+                const count = 100000, boxSize = 12;
                 const positions = new Float32Array(count * 3);
                 const velocities = new Float32Array(count * 3);
-                const boxSize = 12; // Confine to a smaller box
-                for (let i=0; i < positions.length; i++) positions[i] = (Math.random() - 0.5) * boxSize;
+                for (let i=0; i < count; i++) {
+                    const i3 = i*3;
+                    positions[i3] = (Math.random() - 0.5) * boxSize;
+                    positions[i3+1] = (Math.random() - 0.5) * boxSize;
+                    positions[i3+2] = (Math.random() - 0.5) * boxSize;
+                }
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
                 geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
                 const material = new THREE.PointsMaterial({ color: 0x888888, size: 0.03 });
@@ -466,9 +515,7 @@
                         uniform vec2 mousePos;
                         varying vec2 vUv;
                         
-                        float random(vec2 st) {
-                            return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
-                        }
+                        float random(vec2 st) { return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123); }
                         
                         vec3 hsv2rgb(vec3 c) {
                             vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -477,29 +524,20 @@
                         }
 
                         void main() {
-                            // Torch effect
                             float dist = distance(vUv, vec2(mousePos.x * 0.5 + 0.5, mousePos.y * 0.5 + 0.5));
                             float intensity = smoothstep(0.3, 0.0, dist);
-                            
-                            // Base static noise
                             float staticNoise = random(vUv + random(vec2(time)));
-                            
-                            // Color pattern revealed by torch
                             vec2 pos = vUv * 5.0 + time * 0.1;
                             float r = sin(pos.x + time) * 0.5 + 0.5;
                             float g = cos(pos.y + time) * 0.5 + 0.5;
                             float b = sin(pos.x * pos.y + time) * 0.5 + 0.5;
                             vec3 color = hsv2rgb(vec3(r, g, b));
-                            
-                            // Mix between static and color based on torch intensity
                             vec3 finalColor = mix(vec3(staticNoise), color, intensity);
-                            
                             gl_FragColor = vec4(finalColor, 1.0);
                         }
                     `,
                 });
-                const plane = new THREE.Mesh(geometry, material);
-                return [plane];
+                return [new THREE.Mesh(geometry, material)];
             },
             'scale': () => {
                 const geometry = new THREE.BufferGeometry();
@@ -552,40 +590,64 @@
             requestAnimationFrame(animate);
             const objects = scene.children;
             const targetRot = {x: mouse.y * 0.1, y: mouse.x * 0.1};
-            scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.05;
-            scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.05;
+            
+            // Apply rotation more slowly for a majestic feel
+            scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.02;
+            scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.02;
 
             switch(animationState) {
+                case 'quantum': {
+                    const points = objects[0];
+                    points.rotation.y += 0.0005; // Slow constant rotation
+                    const time = Date.now() * 0.0005;
+                    const positions = points.geometry.attributes.position;
+                    // Subtle shimmer effect
+                    for (let i = 0; i < positions.count; i++) {
+                        const i3 = i * 3;
+                        const x = positions.array[i3];
+                        const y = positions.array[i3+1];
+                        positions.array[i3] += Math.sin(time + y) * 0.001;
+                        positions.array[i3+1] += Math.cos(time + x) * 0.001;
+                    }
+                    positions.needsUpdate = true;
+                    break;
+                }
+                case 'intro': {
+                    if (introCtx && Math.random() > 0.5) { 
+                        for (let i = 0; i < 150; i++) { 
+                            const x = Math.floor(Math.random() * columns);
+                            const y = Math.floor(Math.random() * rows);
+                            introCtx.fillStyle = '#000000';
+                            introCtx.fillRect(x * fontSize, y * fontSize - fontSize, fontSize, fontSize * 1.1);
+                            introCtx.fillStyle = '#4a4a4a';
+                            introCtx.fillText(chars[Math.floor(Math.random() * chars.length)], x * fontSize, y * fontSize);
+                        }
+                        if(introTexture) introTexture.needsUpdate = true;
+                    }
+                    break;
+                }
                 case 'initial': {
                     const lines = objects[0];
                     const positions = lines.geometry.attributes.position;
                     const data = lines.geometry.attributes.data;
-                    const time = Date.now() * 0.0001; // Slower animation
+                    const time = Date.now() * 0.0001; 
                     const noiseScale = 0.3;
                     const lineLength = 1.5;
                     const mouse3D_initial = new THREE.Vector3(mouse.x * 10, mouse.y * 5, 0);
 
                     for (let i = 0; i < positions.count / 2; i++) {
                         const i6 = i * 6;
-                        
-                        const x = data.array[i*3];
-                        const y = data.array[i*3+1];
-
+                        const x = data.array[i*3], y = data.array[i*3+1];
                         const angle = SimplexNoise.noise3D(x * noiseScale, y * noiseScale, time) * Math.PI * 2;
-                        
-                        positions.array[i6] = x;
-                        positions.array[i6+1] = y;
-
+                        positions.array[i6] = x; positions.array[i6+1] = y;
                         positions.array[i6+3] = x + Math.cos(angle) * lineLength;
                         positions.array[i6+4] = y + Math.sin(angle) * lineLength;
-                        
-                        // Mouse interaction
                         const p = new THREE.Vector3(x,y,0);
                         const dist = p.distanceTo(mouse3D_initial);
                         if(dist < 3) {
                             const force = (3 - dist) / 3;
-                            positions.array[i6+3] += (x - mouse3D_initial.x) * force * 0.2; // Softer force
-                            positions.array[i6+4] += (y - mouse3D_initial.y) * force * 0.2; // Softer force
+                            positions.array[i6+3] += (x - mouse3D_initial.x) * force * 0.2; 
+                            positions.array[i6+4] += (y - mouse3D_initial.y) * force * 0.2; 
                         }
                     }
                     positions.needsUpdate = true;
@@ -648,10 +710,16 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            // Re-setup intro texture on resize
+            if(animationState === 'intro' && scene.children.length > 0) {
+                 setupIntroTexture();
+                 scene.children[0].material.map = introTexture;
+            }
         });
 
         // Initial setup for first view
-        const initialObjects = sceneInitializers.initial();
+        setupIntroTexture();
+        const initialObjects = sceneInitializers.quantum();
         initialObjects.forEach(obj => scene.add(obj));
         animate();
     </script>
