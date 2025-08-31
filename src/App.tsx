@@ -4,6 +4,7 @@ interface ThreeJSApp {
   init: () => void
   cleanup: () => void
   switchScene: (state: string) => void
+  updatePixelZoom: (zoomLevel: number) => void
 }
 
 declare global {
@@ -21,8 +22,14 @@ function App() {
   const [hasInteracted, setHasInteracted] = useState(false)
   const [narrativeIndex, setNarrativeIndex] = useState(-1)
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [pixelZoomLevel, setPixelZoomLevel] = useState(0) // 0 = single pixel, 1 = zoomed out to full image
   
   const threeAppRef = useRef<ThreeJSApp | null>(null)
+
+  // Debug zoom level changes
+  useEffect(() => {
+    console.log('Pixel zoom level changed to:', pixelZoomLevel)
+  }, [pixelZoomLevel])
 
   const narrativeStates = [
     {
@@ -170,6 +177,34 @@ function App() {
             }
           }, 500)
         } else {
+          // Special handling for pixels phase - same as wheel handler
+          if (narrativeIndex === 1) { // pixels phase
+            console.log('Pixels phase key event, current zoom level:', pixelZoomLevel)
+            
+            // Use callback form to get the most current state
+            setPixelZoomLevel(currentZoom => {
+              console.log('Current zoom in key callback:', currentZoom)
+              
+              if (currentZoom < 0.99) { // Use 0.99 to avoid floating point precision issues
+                const newZoomLevel = Math.min(1, currentZoom + (1/6)) // Exactly 6 steps to reach 1.0
+                console.log('Updating zoom level to:', newZoomLevel)
+                
+                // Update Three.js immediately with new value
+                if (threeAppRef.current) {
+                  threeAppRef.current.updatePixelZoom(newZoomLevel)
+                }
+                
+                return newZoomLevel
+              } else {
+                // Only advance to next phase when fully zoomed out
+                console.log('Pixels zoom complete, advancing to next phase')
+                advanceNarrative()
+                return 0 // Reset for next time
+              }
+            })
+            return
+          }
+          
           advanceNarrative()
         }
       }
@@ -177,6 +212,34 @@ function App() {
 
     const handleWheel = (e: WheelEvent) => {
       if (!hasInteracted || e.deltaY <= 0) return
+      
+      // Special handling for pixels phase - zoom out instead of advancing
+      if (narrativeIndex === 1) { // pixels phase
+        console.log('Pixels phase wheel event, current zoom level:', pixelZoomLevel)
+        
+        // Use callback form to get the most current state
+        setPixelZoomLevel(currentZoom => {
+          console.log('Current zoom in callback:', currentZoom)
+          
+          if (currentZoom < 0.99) { // Use 0.99 to avoid floating point precision issues
+            const newZoomLevel = Math.min(1, currentZoom + (1/6)) // Exactly 6 steps to reach 1.0
+            console.log('Updating zoom level to:', newZoomLevel)
+            
+            // Update Three.js immediately with new value
+            if (threeAppRef.current) {
+              threeAppRef.current.updatePixelZoom(newZoomLevel)
+            }
+            
+            return newZoomLevel
+          } else {
+            // Only advance to next phase when fully zoomed out
+            console.log('Pixels zoom complete, advancing to next phase')
+            advanceNarrative()
+            return 0 // Reset for next time
+          }
+        })
+        return
+      }
       
       console.log('Global wheel, advancing')
       advanceNarrative()
@@ -200,14 +263,16 @@ function App() {
       }
     }
 
-    // Add throttling to wheel
+    // Add throttling to wheel - reduce throttle time for pixels phase
     let wheelTimeout: number | null = null
     const throttledWheel = (e: WheelEvent) => {
       if (wheelTimeout) return
+      // Shorter throttle for pixels phase to allow smoother zoom progression
+      const throttleTime = narrativeIndex === 1 ? 150 : 300
       wheelTimeout = window.setTimeout(() => {
         handleWheel(e)
         wheelTimeout = null
-      }, 300)
+      }, throttleTime)
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -245,6 +310,95 @@ function App() {
     let scene: any, camera: any, renderer: any
     let mouse = { x: 0, y: 0 }
     let animationState = 'quantum'
+    let pixelsCanvas: HTMLCanvasElement, pixelsCtx: CanvasRenderingContext2D, pixelsTexture: any
+    let coordinatesCanvas: HTMLCanvasElement, coordinatesCtx: CanvasRenderingContext2D, coordinatesTexture: any
+    let columns: number, rows: number
+    const chars = '0123456789'
+    const fontSize = 16
+
+    let pixelGroup: any
+
+    const setupPixelsTexture = () => {
+      columns = Math.floor(window.innerWidth / fontSize)
+      rows = Math.floor(window.innerHeight / fontSize)
+      pixelsCanvas = document.createElement('canvas')
+      pixelsCanvas.width = window.innerWidth
+      pixelsCanvas.height = window.innerHeight
+      pixelsCtx = pixelsCanvas.getContext('2d')!
+      pixelsCtx.font = `${fontSize}px monospace`
+      pixelsCtx.textAlign = 'center'
+      pixelsCtx.textBaseline = 'middle'
+      
+      pixelsCtx.fillStyle = '#000000'
+      pixelsCtx.fillRect(0, 0, pixelsCanvas.width, pixelsCanvas.height)
+      
+      pixelsTexture = new window.THREE.CanvasTexture(pixelsCanvas)
+    }
+
+    const setupCoordinatesTexture = () => {
+      coordinatesCanvas = document.createElement('canvas')
+      coordinatesCanvas.width = window.innerWidth
+      coordinatesCanvas.height = window.innerHeight
+      coordinatesCtx = coordinatesCanvas.getContext('2d')!
+      coordinatesCtx.font = `${fontSize}px monospace`
+      coordinatesCtx.textAlign = 'center'
+      coordinatesCtx.textBaseline = 'middle'
+      
+      coordinatesCtx.fillStyle = '#000000'
+      coordinatesCtx.fillRect(0, 0, coordinatesCanvas.width, coordinatesCanvas.height)
+      
+      // Add some sample image coordinates text
+      coordinatesCtx.fillStyle = '#4a4a4a'
+      coordinatesCtx.font = '12px monospace'
+      coordinatesCtx.textAlign = 'left'
+      coordinatesCtx.fillText('Image: landscape_sunset.jpg', 20, 30)
+      coordinatesCtx.fillText('Coordinates: (127, 89, 45), (255, 201, 156), (34, 67, 123)', 20, 50)
+      coordinatesCtx.fillText('Position: [0,0] [1,0] [2,0] [0,1] [1,1] [2,1]...', 20, 70)
+      
+      coordinatesTexture = new window.THREE.CanvasTexture(coordinatesCanvas)
+    }
+
+    const createSampleImageData = () => {
+      // Create a simple 32x32 image with a gradient and some patterns
+      const size = 32
+      const imageData = new Uint8Array(size * size * 3) // RGB
+      
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const index = (y * size + x) * 3
+          
+          // Create a simple pattern - gradient with some geometric shapes
+          let r = Math.floor((x / size) * 255)
+          let g = Math.floor((y / size) * 255)
+          let b = Math.floor(((x + y) / (size * 2)) * 255)
+          
+          // Add some geometric patterns
+          if (x > size/4 && x < size*3/4 && y > size/4 && y < size*3/4) {
+            r = Math.floor(r * 0.7 + 255 * 0.3) // Brighten center
+          }
+          
+          // Add a diagonal line
+          if (Math.abs(x - y) < 2) {
+            r = 255
+            g = 100
+            b = 100
+          }
+          
+          // Make center pixel a specific known color for display
+          if (x === 16 && y === 16) {
+            r = 127
+            g = 89
+            b = 203
+          }
+          
+          imageData[index] = r
+          imageData[index + 1] = g
+          imageData[index + 2] = b
+        }
+      }
+      
+      return { data: imageData, size }
+    }
 
     const sceneInitializers: { [key: string]: () => any[] } = {
       'quantum': () => {
@@ -284,58 +438,96 @@ function App() {
       },
 
       'pixels': () => {
-        const geometry = new window.THREE.BufferGeometry()
-        const count = 10000
-        const positions = new Float32Array(count * 3)
+        // Create a simple plane with a shader that can zoom into pixels
+        const geometry = new window.THREE.PlaneGeometry(10, 10)
         
-        // Create grid-like pixel structure
-        const gridSize = 20
-        for (let i = 0; i < count; i++) {
-          const i3 = i * 3
-          positions[i3] = ((i % gridSize) - gridSize/2) * 0.5
-          positions[i3+1] = (Math.floor(i / gridSize) % gridSize - gridSize/2) * 0.5
-          positions[i3+2] = (Math.floor(i / (gridSize * gridSize)) - 5) * 0.5
+        // Create image texture from our sample data
+        const imageData = createSampleImageData()
+        const canvas = document.createElement('canvas')
+        canvas.width = imageData.size
+        canvas.height = imageData.size
+        const ctx = canvas.getContext('2d')!
+        const imgData = ctx.createImageData(imageData.size, imageData.size)
+        
+        for (let i = 0; i < imageData.data.length; i++) {
+          imgData.data[i * 4] = imageData.data[i * 3]     // R
+          imgData.data[i * 4 + 1] = imageData.data[i * 3 + 1] // G
+          imgData.data[i * 4 + 2] = imageData.data[i * 3 + 2] // B
+          imgData.data[i * 4 + 3] = 255 // A
         }
-
-        geometry.setAttribute('position', new window.THREE.BufferAttribute(positions, 3))
-        const material = new window.THREE.PointsMaterial({ 
-          color: 0xffffff, 
-          size: 0.1, 
-          transparent: true, 
-          opacity: 0.6 
+        
+        ctx.putImageData(imgData, 0, 0)
+        const texture = new window.THREE.CanvasTexture(canvas)
+        texture.magFilter = window.THREE.NearestFilter // Pixelated look
+        texture.minFilter = window.THREE.NearestFilter
+        
+        const material = new window.THREE.ShaderMaterial({
+          uniforms: {
+            uTexture: { value: texture },
+            uZoom: { value: 0.0 },
+            uCenter: { value: new window.THREE.Vector2(0.5, 0.5) },
+            uPixelSize: { value: 1.0 / imageData.size }
+          },
+          vertexShader: `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            uniform sampler2D uTexture;
+            uniform float uZoom;
+            uniform vec2 uCenter;
+            uniform float uPixelSize;
+            varying vec2 vUv;
+            
+            void main() {
+              // Calculate zoom factor (0 = zoomed in on single pixel, 1 = full image)
+              float zoomFactor = pow(uZoom, 0.5);
+              
+              // Calculate UV coordinates for zoomed view
+              vec2 zoomedUV = uCenter + (vUv - 0.5) * zoomFactor;
+              
+              // Clamp to texture bounds
+              zoomedUV = clamp(zoomedUV, 0.0, 1.0);
+              
+              // Sample the texture
+              vec4 color = texture2D(uTexture, zoomedUV);
+              
+              // Add pixel grid effect when zoomed in
+              if (uZoom < 0.8) {
+                vec2 pixelCoord = floor(zoomedUV / uPixelSize);
+                vec2 pixelUV = (pixelCoord + 0.5) * uPixelSize;
+                color = texture2D(uTexture, pixelUV);
+                
+                // Add grid lines
+                vec2 grid = abs(fract(zoomedUV / uPixelSize) - 0.5);
+                float gridLine = smoothstep(0.0, 0.05, min(grid.x, grid.y));
+                color.rgb = mix(vec3(0.3), color.rgb, gridLine);
+              }
+              
+              gl_FragColor = color;
+            }
+          `
         })
-        const points = new window.THREE.Points(geometry, material)
-        return [points]
+        
+        pixelGroup = new window.THREE.Mesh(geometry, material)
+        return [pixelGroup]
       },
 
       'coordinates': () => {
-        const lineCount = 15000
-        const geometry = new window.THREE.BufferGeometry()
-        const positions = new Float32Array(lineCount * 2 * 3)
-        
-        const centralRadius = 4
-        for (let i = 0; i < lineCount; i++) {
-          const i6 = i * 6
-          const radius = Math.random() * centralRadius
-          const angle = Math.random() * Math.PI * 2
-          const x = Math.cos(angle) * radius
-          const y = Math.sin(angle) * radius
-          positions[i6] = x
-          positions[i6+1] = y
-          positions[i6+2] = 0
-          positions[i6+3] = x
-          positions[i6+4] = y
-          positions[i6+5] = 0
-        }
-        
-        geometry.setAttribute('position', new window.THREE.BufferAttribute(positions, 3))
-        const material = new window.THREE.LineBasicMaterial({ 
-          color: 0xffffff, 
+        const vFOV = window.THREE.MathUtils.degToRad(camera.fov)
+        const height = 2 * Math.tan(vFOV / 2) * camera.position.z
+        const width = height * camera.aspect
+        const geometry = new window.THREE.PlaneGeometry(width, height)
+        const material = new window.THREE.MeshBasicMaterial({ 
+          map: coordinatesTexture, 
           transparent: true, 
-          opacity: 0.1, 
-          blending: window.THREE.AdditiveBlending 
+          opacity: 0.8 
         })
-        return [new window.THREE.LineSegments(geometry, material)]
+        const plane = new window.THREE.Mesh(geometry, material)
+        return [plane]
       },
 
       'scale': () => {
@@ -493,6 +685,21 @@ function App() {
       }
     }
 
+    const updatePixelZoomInternal = (zoomLevel: number) => {
+      if (!pixelGroup || !pixelGroup.material) return
+      
+      // Update shader uniform for zoom level
+      pixelGroup.material.uniforms.uZoom.value = zoomLevel
+      
+      // Adjust camera distance for dramatic effect
+      const targetZ = zoomLevel < 0.2 ? 15 :  // Close for single pixel view
+                     zoomLevel < 0.5 ? 12 :  // Medium-close for few pixels
+                     zoomLevel < 0.8 ? 10 :  // Medium distance
+                     8                       // Far for full image
+      
+      camera.position.z = targetZ
+    }
+
     const switchScene = (state: string) => {
       console.log('Switching Three.js scene to:', state)
       if (animationState === state) return
@@ -518,9 +725,32 @@ function App() {
           }
           break
         case 'pixels':
-          if (objects[0]) {
-            objects[0].rotation.x += 0.01
-            objects[0].rotation.y += 0.01
+          // Pixel zoom animation is handled by updatePixelZoom
+          break
+        case 'coordinates':
+          if (coordinatesCtx && Math.random() > 0.7) { 
+            // Clear some areas and add new numbers
+            for (let i = 0; i < 50; i++) { 
+              const x = Math.floor(Math.random() * columns)
+              const y = Math.floor(Math.random() * rows)
+              coordinatesCtx.fillStyle = '#000000'
+              coordinatesCtx.fillRect(x * fontSize, y * fontSize - fontSize, fontSize, fontSize * 1.1)
+              coordinatesCtx.fillStyle = '#666666'
+              coordinatesCtx.fillText(chars[Math.floor(Math.random() * chars.length)], x * fontSize, y * fontSize)
+            }
+            // Occasionally update the coordinate text
+            if (Math.random() > 0.95) {
+              coordinatesCtx.fillStyle = '#000000'
+              coordinatesCtx.fillRect(20, 40, 600, 20)
+              coordinatesCtx.fillStyle = '#4a4a4a'
+              coordinatesCtx.font = '12px monospace'
+              coordinatesCtx.textAlign = 'left'
+              const r = Math.floor(Math.random() * 256)
+              const g = Math.floor(Math.random() * 256)
+              const b = Math.floor(Math.random() * 256)
+              coordinatesCtx.fillText(`Coordinates: (${r}, ${g}, ${b}), (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`, 20, 50)
+            }
+            if(coordinatesTexture) coordinatesTexture.needsUpdate = true
           }
           break
         case 'library':
@@ -559,10 +789,23 @@ function App() {
           camera.aspect = window.innerWidth / window.innerHeight
           camera.updateProjectionMatrix()
           renderer.setSize(window.innerWidth, window.innerHeight)
+          // Re-setup textures on resize
+          if(animationState === 'pixels' && scene.children.length > 0) {
+            setupPixelsTexture()
+            scene.children[0].material.map = pixelsTexture
+          }
+          if(animationState === 'coordinates' && scene.children.length > 0) {
+            setupCoordinatesTexture()
+            scene.children[0].material.map = coordinatesTexture
+          }
         }
 
         window.addEventListener('mousemove', handleMouseMove)
         window.addEventListener('resize', handleResize)
+
+        // Setup initial textures
+        setupPixelsTexture()
+        setupCoordinatesTexture()
 
         // Initialize with quantum state
         const initialObjects = sceneInitializers.quantum()
@@ -578,6 +821,10 @@ function App() {
       },
 
       switchScene: switchScene,
+      
+      updatePixelZoom: (zoomLevel: number) => {
+        updatePixelZoomInternal(zoomLevel)
+      },
 
       cleanup: () => {
         if ((window as any).threeCleanup) {
@@ -617,6 +864,31 @@ function App() {
             style={{ textShadow: '0 0 10px rgba(204, 204, 204, 0.3)' }}
           />
           
+          {/* Pixel information overlay - only show during pixels phase when zoomed in */}
+          {narrativeIndex === 1 && pixelZoomLevel < 0.2 && (
+            <div className="absolute top-8 left-8 font-mono text-xs text-gray-400 space-y-1 animate-pulse">
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-purple-500 rounded-sm"></div>
+                <span className="text-purple-300">[16,16]</span>
+              </div>
+              <div className="text-gray-500">RGB(127,89,203)</div>
+            </div>
+          )}
+          
+          {/* Zoom progress indicator */}
+          {narrativeIndex === 1 && pixelZoomLevel > 0 && pixelZoomLevel < 1 && (
+            <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 flex space-x-1">
+              {[0, 1/6, 2/6, 3/6, 4/6, 5/6].map((threshold, index) => (
+                <div
+                  key={index}
+                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                    pixelZoomLevel > threshold ? 'bg-white' : 'bg-gray-700'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+          
           <div 
             ref={scrollIndicatorRef}
             className="opacity-0 transition-opacity duration-1000 delay-1000 mt-16"
@@ -638,7 +910,12 @@ function App() {
               </svg>
             </div>
             <div className="text-xs text-gray-500">
-              Scroll or press Space/↓ to continue | R to reset
+              {narrativeIndex === 1 && pixelZoomLevel < 1 ? 
+                `Scroll to zoom out (${Math.floor(pixelZoomLevel * 6) + 1}/6) | R to reset` : 
+                narrativeIndex === 1 ? 
+                'Scroll to continue to next phase | R to reset' :
+                'Scroll or press Space/↓ to continue | R to reset'
+              }
             </div>
           </div>
         </footer>
