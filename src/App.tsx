@@ -26,8 +26,8 @@ function App() {
 
   const narrativeStates = [
     {
-      title: "How many images can possibly exist?",
-      text: "What lies in the space between Order and Chaos?",
+      title: "What is an Image?",
+      text: "Is it something we create, or something we discover in a space of infinite potential?",
       state: 'quantum'
     },
     {
@@ -37,42 +37,47 @@ function App() {
     },
     {
       title: "Mathematical Certainty",
-      text: "Every possible combination of these numbers maps to exactly one unique image. Every image maps to exactly one unique combination of numbers.",
+      text: "Every possible combination of these numbers maps to exactly one unique image. Every image has a unique coordinate.",
       state: 'coordinates'
     },
     {
       title: "The Scale",
-      text: "16,777,216 colors per pixel. 1,048,576 pixels per image. This gives us a number with over 7.5 million digits.",
+      text: "With over 16.7 million colors per pixel and a million pixels per image, the total number of images that exists, has over 7.5 million digits.",
       state: 'scale'
     },
     {
       title: "Beyond Comprehension",
-      text: "More combinations than atoms in the entire universe. Yet finite. Every photograph that could ever be taken already exists as coordinates.",
+      text: "More combinations than atoms in the universe. Yet finite. Every photograph that could ever be taken already exists as coordinates.",
       state: 'infinite'
     },
     {
-      title: "The Library of Babel",
-      text: "Every frame of every possible film. Every face that could ever be seen. All waiting in mathematical space.",
+      title: "The Universal Archive",
+      text: "Every frame of every possible film. Every face that could ever be seen. All waiting in a vast mathematical space to be discovered.",
       state: 'library'
     },
     {
-      title: "Islands of Meaning",
-      text: "Most of this space is noise. Natural images are extremely rare islands in a vast sea of randomness.",
+      title: "Signal in the Noise",
+      text: "Most of this space is visual static. Meaningful images are extremely rare islands in a vast sea of randomness.",
       state: 'noise'
     },
     {
-      title: "Time as Illusion",
-      text: "Time becomes a set of ordered images. Each frame static and timeless. Motion is consciousness moving between coordinates.",
+      title: "A Search Through Static",
+      text: "Locating these rare, structured images in a sea of randomness is beyond human chance. Our tools were limited to coordinates we found in the physical world.",
       state: 'time'
     },
     {
-      title: "Navigation",
-      text: "We don't create images. We navigate to their predetermined coordinates like travelers arriving at destinations that were always there.",
+      title: "The Latent Compass",
+      text: "Now, we have a new kind of compass. Artificial Intelligence learns the topography of this space, translating human intent into precise coordinates.",
       state: 'navigation'
     },
     {
-      title: "",
-      text: "We are all navigators in this space. Each choice a coordinate, each moment a point in the mathematical sublime.",
+      title: "Guided by Imagination",
+      text: "We don't just wander; we direct. The AI acts as our guide, charting a course through the noise to the images we imagine.",
+      state: 'sublime'
+    },
+    {
+      title: "The Expansed Canvas",
+      text: "This interface allows human language to act as the query language for the universe of all possible images, unlocking exploration across a previously unmappable visual expanse.",
       state: 'sublime'
     }
   ]
