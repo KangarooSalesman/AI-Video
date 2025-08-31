@@ -64,12 +64,12 @@ function App() {
     },
     {
       title: "Signal in the Noise",
-      text: "Most of this space is visual static. Meaningful images are extremely rare islands in a vast sea of randomness.",
+      text: "Most of this space is visual static. Meaningful images are extremely rare in a vast sea of random noise.",
       state: 'noise'
     },
     {
       title: "A Search Through Static",
-      text: "Locating these rare, structured images in a sea of randomness is beyond human chance. Our tools were limited to coordinates we found in the physical world.",
+      text: "Locating these rare, structured images in a sea of randomness wasn’t something we could do by chance. Our tools were limited to coordinates we only found in the physical world.",
       state: 'time'
     },
     {
@@ -79,12 +79,12 @@ function App() {
     },
     {
       title: "Guided by Imagination",
-      text: "We don't just wander; we direct. The AI acts as our guide, charting a course through the noise to the images we imagine.",
+      text: "We don't just wander. The AI acts as our guide, charting a course through the noise to the images we imagine.",
       state: 'sublime'
     },
     {
       title: "The Expansed Canvas",
-      text: "This interface allows human language to act as the query language for the universe of all possible images, unlocking exploration across a previously unmappable visual expanse.",
+      text: "This interface allows human language to act as the query language for the universe of all possible images 2) unlocking exploration across a previously unmappable visual expanse.",
       state: 'sublime'
     }
   ]
