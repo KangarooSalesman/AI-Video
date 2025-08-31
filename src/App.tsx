@@ -198,7 +198,7 @@ function App() {
               } else {
                 // Only advance to next phase when fully zoomed out
                 console.log('Pixels zoom complete, advancing to next phase')
-                advanceNarrative()
+          advanceNarrative()
                 return 0 // Reset for next time
               }
             })
@@ -599,7 +599,7 @@ function App() {
         // Create image texture from our sample data
         // You can easily switch between different images:
         // const imageData = createSampleImageData()      // Smiley face (current)
-        const imageData = await loadExternalImage('/ζζ.png') // Your image
+        const imageData = await loadExternalImage('/ζζ.jpg') // Your image
         
         // For external images, you have these options:
         // 1. Put your image in the public folder and use: await loadExternalImage('/your-image.png')
