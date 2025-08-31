@@ -69,7 +69,7 @@ function App() {
     },
     {
       title: "A Search Through Static",
-      text: "Locating these rare, structured images in a sea of randomness wasn’t something we could do by chance. Our tools were limited to coordinates we only found in the physical world or by painstakingly arranging the pixels ourselves (painting)",
+      text: "Locating these rare, structured images wasn’t something we could do by chance. Our tools were limited to coordinates we only found in the physical world or by arranging the pixels ourselves (painting)",
       state: 'time'
     },
     {
