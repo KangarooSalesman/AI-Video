@@ -1,9 +1,9 @@
 import { useRef, useEffect, useState } from 'react'
 
 interface ThreeJSApp {
-  init: () => void
+  init: () => Promise<void>
   cleanup: () => void
-  switchScene: (state: string) => void
+  switchScene: (state: string) => Promise<void>
   updatePixelZoom: (zoomLevel: number) => void
 }
 
@@ -90,7 +90,7 @@ function App() {
   ]
 
   // Simple advance function
-  const advanceNarrative = () => {
+  const advanceNarrative = async () => {
     console.log('advanceNarrative called, current index:', narrativeIndex, 'isTransitioning:', isTransitioning)
     
     if (isTransitioning || narrativeIndex >= narrativeStates.length - 1) {
@@ -107,7 +107,7 @@ function App() {
     if (narrativeRef.current) {
       narrativeRef.current.classList.remove('visible')
       
-      setTimeout(() => {
+      setTimeout(async () => {
         const currentState = narrativeStates[newIndex]
         let content = ''
         if (currentState.title) {
@@ -123,7 +123,7 @@ function App() {
         
         // Switch Three.js scene
         if (threeAppRef.current) {
-          threeAppRef.current.switchScene(currentState.state)
+          await threeAppRef.current.switchScene(currentState.state)
         }
         
         setIsTransitioning(false)
@@ -134,7 +134,7 @@ function App() {
   }
 
   // Reset function
-  const resetExperience = () => {
+  const resetExperience = async () => {
     console.log('Resetting experience')
     setNarrativeIndex(-1)
     setHasInteracted(false)
@@ -150,7 +150,7 @@ function App() {
     }
     
     if (threeAppRef.current) {
-      threeAppRef.current.switchScene('quantum')
+      await threeAppRef.current.switchScene('quantum')
     }
   }
 
@@ -186,7 +186,7 @@ function App() {
               console.log('Current zoom in key callback:', currentZoom)
               
               if (currentZoom < 0.99) { // Use 0.99 to avoid floating point precision issues
-                const newZoomLevel = Math.min(1, currentZoom + (1/6)) // Exactly 6 steps to reach 1.0
+                const newZoomLevel = Math.min(1, currentZoom + 0.1) // 10 steps for better progression
                 console.log('Updating zoom level to:', newZoomLevel)
                 
                 // Update Three.js immediately with new value
@@ -222,7 +222,7 @@ function App() {
           console.log('Current zoom in callback:', currentZoom)
           
           if (currentZoom < 0.99) { // Use 0.99 to avoid floating point precision issues
-            const newZoomLevel = Math.min(1, currentZoom + (1/6)) // Exactly 6 steps to reach 1.0
+            const newZoomLevel = Math.min(1, currentZoom + 0.1) // 10 steps for better progression
             console.log('Updating zoom level to:', newZoomLevel)
             
             // Update Three.js immediately with new value
@@ -295,7 +295,7 @@ function App() {
       
       const threeApp = createThreeJSApp()
       threeAppRef.current = threeApp
-      threeApp.init()
+      threeApp.init().catch(console.error)
     }
     document.head.appendChild(script)
 
@@ -359,48 +359,203 @@ function App() {
     }
 
     const createSampleImageData = () => {
-      // Create a simple 32x32 image with a gradient and some patterns
+      // Create a 32x32 pixel art image - a simple smiley face
       const size = 32
       const imageData = new Uint8Array(size * size * 3) // RGB
       
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
+      // Fill with background color (light blue sky)
+      for (let i = 0; i < imageData.length; i += 3) {
+        imageData[i] = 135     // R
+        imageData[i + 1] = 206 // G  
+        imageData[i + 2] = 235 // B (light blue)
+      }
+      
+      const setPixel = (x: number, y: number, r: number, g: number, b: number) => {
+        if (x >= 0 && x < size && y >= 0 && y < size) {
           const index = (y * size + x) * 3
-          
-          // Create a simple pattern - gradient with some geometric shapes
-          let r = Math.floor((x / size) * 255)
-          let g = Math.floor((y / size) * 255)
-          let b = Math.floor(((x + y) / (size * 2)) * 255)
-          
-          // Add some geometric patterns
-          if (x > size/4 && x < size*3/4 && y > size/4 && y < size*3/4) {
-            r = Math.floor(r * 0.7 + 255 * 0.3) // Brighten center
-          }
-          
-          // Add a diagonal line
-          if (Math.abs(x - y) < 2) {
-            r = 255
-            g = 100
-            b = 100
-          }
-          
-          // Make center pixel a specific known color for display
-          if (x === 16 && y === 16) {
-            r = 127
-            g = 89
-            b = 203
-          }
-          
           imageData[index] = r
           imageData[index + 1] = g
           imageData[index + 2] = b
         }
       }
       
+      // Draw a simple smiley face
+      const centerX = 16, centerY = 16
+      
+      // Face circle (yellow)
+      for (let y = 6; y < 26; y++) {
+        for (let x = 6; x < 26; x++) {
+          const dx = x - centerX
+          const dy = y - centerY
+          const distance = Math.sqrt(dx * dx + dy * dy)
+          if (distance <= 9) {
+            setPixel(x, y, 255, 255, 0) // Yellow
+          }
+        }
+      }
+      
+      // Left eye (black)
+      setPixel(12, 12, 0, 0, 0)
+      setPixel(13, 12, 0, 0, 0)
+      setPixel(12, 13, 0, 0, 0)
+      setPixel(13, 13, 0, 0, 0)
+      
+      // Right eye (black)
+      setPixel(18, 12, 0, 0, 0)
+      setPixel(19, 12, 0, 0, 0)
+      setPixel(18, 13, 0, 0, 0)
+      setPixel(19, 13, 0, 0, 0)
+      
+      // Smile (black)
+      setPixel(12, 20, 0, 0, 0)
+      setPixel(13, 21, 0, 0, 0)
+      setPixel(14, 22, 0, 0, 0)
+      setPixel(15, 22, 0, 0, 0)
+      setPixel(16, 22, 0, 0, 0)
+      setPixel(17, 22, 0, 0, 0)
+      setPixel(18, 21, 0, 0, 0)
+      setPixel(19, 20, 0, 0, 0)
+      
+      // Make center pixel a specific known color for display (nose)
+      setPixel(16, 16, 255, 192, 203) // Pink nose
+      
       return { data: imageData, size }
     }
 
-    const sceneInitializers: { [key: string]: () => any[] } = {
+    // Alternative sample image - simple landscape
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const createLandscapeImageData = () => {
+      const size = 32
+      const imageData = new Uint8Array(size * size * 3) // RGB
+      
+      const setPixel = (x: number, y: number, r: number, g: number, b: number) => {
+        if (x >= 0 && x < size && y >= 0 && y < size) {
+          const index = (y * size + x) * 3
+          imageData[index] = r
+          imageData[index + 1] = g
+          imageData[index + 2] = b
+        }
+      }
+      
+      // Sky (light blue gradient)
+      for (let y = 0; y < 20; y++) {
+        for (let x = 0; x < size; x++) {
+          const intensity = 1 - (y / 20) * 0.3
+          setPixel(x, y, Math.floor(135 * intensity), Math.floor(206 * intensity), 235)
+        }
+      }
+      
+      // Mountains (gray/brown)
+      for (let x = 0; x < size; x++) {
+        const mountainHeight = Math.floor(8 + 4 * Math.sin(x * 0.3) + 2 * Math.sin(x * 0.1))
+        for (let y = 20 - mountainHeight; y < 20; y++) {
+          setPixel(x, y, 101, 67, 33) // Brown mountains
+        }
+      }
+      
+      // Grass (green)
+      for (let y = 20; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          setPixel(x, y, 34, 139, 34) // Forest green
+        }
+      }
+      
+      // Sun
+      setPixel(6, 6, 255, 255, 0)
+      setPixel(7, 6, 255, 255, 0)
+      setPixel(6, 7, 255, 255, 0)
+      setPixel(7, 7, 255, 255, 0)
+      
+      // Center pixel (tree trunk)
+      setPixel(16, 16, 101, 67, 33) // Brown trunk
+      
+      return { data: imageData, size }
+    }
+
+    // Function to load an external image file
+    const loadExternalImage = (imagePath: string): Promise<{data: Uint8Array, size: number}> => {
+      return new Promise((resolve) => {
+        console.log('Attempting to load image from:', imagePath)
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        
+        img.onload = () => {
+          console.log('Image loaded successfully! Dimensions:', img.width, 'x', img.height)
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')!
+          
+          // Keep original resolution for better quality, but limit to reasonable size
+          const maxSize = 1024
+          let targetSize = Math.min(Math.max(img.width, img.height), maxSize)
+          
+          // Make sure it's a power of 2 for better zoom steps
+          targetSize = Math.pow(2, Math.floor(Math.log2(targetSize)))
+          
+          canvas.width = targetSize
+          canvas.height = targetSize
+          ctx.drawImage(img, 0, 0, targetSize, targetSize)
+          
+          const imageData = ctx.getImageData(0, 0, targetSize, targetSize)
+          const rgbData = new Uint8Array(targetSize * targetSize * 3)
+          
+          for (let i = 0; i < imageData.data.length; i += 4) {
+            const rgbIndex = (i / 4) * 3
+            rgbData[rgbIndex] = imageData.data[i]     // R
+            rgbData[rgbIndex + 1] = imageData.data[i + 1] // G
+            rgbData[rgbIndex + 2] = imageData.data[i + 2] // B
+          }
+          
+          console.log('Image processed successfully, final size:', targetSize, 'RGB data length:', rgbData.length)
+          resolve({ data: rgbData, size: targetSize })
+        }
+        
+        img.onerror = (error) => {
+          console.error('Failed to load image from:', imagePath)
+          console.error('Error details:', error)
+          console.log('This is likely due to browser security restrictions for local files')
+          console.log('Falling back to smiley face...')
+          // Fallback to smiley face if image fails to load
+          resolve(createSampleImageData())
+        }
+        
+        img.src = imagePath
+      })
+    }
+
+    // Alternative: Load image from file input (for user-selected files)
+    const loadImageFromFile = (file: File): Promise<{data: Uint8Array, size: number}> => {
+      return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const img = new Image()
+          img.onload = () => {
+            console.log('File image loaded successfully! Dimensions:', img.width, 'x', img.height)
+            const canvas = document.createElement('canvas')
+            const ctx = canvas.getContext('2d')!
+            
+            canvas.width = 32
+            canvas.height = 32
+            ctx.drawImage(img, 0, 0, 32, 32)
+            
+            const imageData = ctx.getImageData(0, 0, 32, 32)
+            const rgbData = new Uint8Array(32 * 32 * 3)
+            
+            for (let i = 0; i < imageData.data.length; i += 4) {
+              const rgbIndex = (i / 4) * 3
+              rgbData[rgbIndex] = imageData.data[i]
+              rgbData[rgbIndex + 1] = imageData.data[i + 1]
+              rgbData[rgbIndex + 2] = imageData.data[i + 2]
+            }
+            
+            resolve({ data: rgbData, size: 32 })
+          }
+          img.src = e.target?.result as string
+        }
+        reader.readAsDataURL(file)
+      })
+    }
+
+    const sceneInitializers: { [key: string]: () => any[] | Promise<any[]> } = {
       'quantum': () => {
         const count = 30000
         const geometry = new window.THREE.BufferGeometry()
@@ -437,12 +592,30 @@ function App() {
         return [points]
       },
 
-      'pixels': () => {
+      'pixels': async () => {
         // Create a simple plane with a shader that can zoom into pixels
         const geometry = new window.THREE.PlaneGeometry(10, 10)
         
         // Create image texture from our sample data
-        const imageData = createSampleImageData()
+        // You can easily switch between different images:
+        // const imageData = createSampleImageData()      // Smiley face (current)
+        const imageData = await loadExternalImage('/ζζ.png') // Your image
+        
+        // For external images, you have these options:
+        // 1. Put your image in the public folder and use: await loadExternalImage('/your-image.png')
+        // 2. Use a web URL: await loadExternalImage('https://example.com/image.jpg')
+        // 3. Local file paths don't work in browsers due to security restrictions
+        
+        // Example with web URL (uncomment to try):
+        // const imageData = await loadExternalImage('https://picsum.photos/200/200')
+        
+        // Example with public folder (put image in public/ folder first):
+        // const imageData = await loadExternalImage('/ζζ.png')
+        
+        // Suppress unused variable warnings
+        void createLandscapeImageData
+        void loadImageFromFile
+        
         const canvas = document.createElement('canvas')
         canvas.width = imageData.size
         canvas.height = imageData.size
@@ -466,7 +639,7 @@ function App() {
             uTexture: { value: texture },
             uZoom: { value: 0.0 },
             uCenter: { value: new window.THREE.Vector2(0.5, 0.5) },
-            uPixelSize: { value: 1.0 / imageData.size }
+            uImageSize: { value: imageData.size }
           },
           vertexShader: `
             varying vec2 vUv;
@@ -479,32 +652,43 @@ function App() {
             uniform sampler2D uTexture;
             uniform float uZoom;
             uniform vec2 uCenter;
-            uniform float uPixelSize;
+            uniform float uImageSize;
             varying vec2 vUv;
             
             void main() {
-              // Calculate zoom factor (0 = zoomed in on single pixel, 1 = full image)
-              float zoomFactor = pow(uZoom, 0.5);
+              // Calculate the zoom level (0 = single pixel, 1 = full image)
+              // Use exponential scaling for better visual progression
+              float zoomLevel = pow(2.0, uZoom * 10.0); // 2^0 to 2^10 = 1 to 1024 pixels
               
-              // Calculate UV coordinates for zoomed view
-              vec2 zoomedUV = uCenter + (vUv - 0.5) * zoomFactor;
+              // Calculate the size of the visible area in UV coordinates
+              float visibleSize = zoomLevel / uImageSize;
+              
+              // Calculate UV coordinates for the zoomed view
+              vec2 offset = (vUv - 0.5) * visibleSize;
+              vec2 sampleUV = uCenter + offset;
               
               // Clamp to texture bounds
-              zoomedUV = clamp(zoomedUV, 0.0, 1.0);
+              sampleUV = clamp(sampleUV, 0.0, 1.0);
+              
+              // Calculate pixel size for grid effect
+              float pixelSize = 1.0 / uImageSize;
               
               // Sample the texture
-              vec4 color = texture2D(uTexture, zoomedUV);
+              vec4 color;
               
-              // Add pixel grid effect when zoomed in
               if (uZoom < 0.8) {
-                vec2 pixelCoord = floor(zoomedUV / uPixelSize);
-                vec2 pixelUV = (pixelCoord + 0.5) * uPixelSize;
+                // When zoomed in, show pixelated version with grid
+                vec2 pixelCoord = floor(sampleUV / pixelSize);
+                vec2 pixelUV = (pixelCoord + 0.5) * pixelSize;
                 color = texture2D(uTexture, pixelUV);
                 
-                // Add grid lines
-                vec2 grid = abs(fract(zoomedUV / uPixelSize) - 0.5);
-                float gridLine = smoothstep(0.0, 0.05, min(grid.x, grid.y));
-                color.rgb = mix(vec3(0.3), color.rgb, gridLine);
+                // Add subtle grid lines to show pixel boundaries
+                vec2 grid = abs(fract(sampleUV / pixelSize) - 0.5);
+                float gridStrength = smoothstep(0.0, 0.02, min(grid.x, grid.y));
+                color.rgb = mix(vec3(0.2), color.rgb, gridStrength);
+              } else {
+                // When zoomed out, show smooth image
+                color = texture2D(uTexture, sampleUV);
               }
               
               gl_FragColor = color;
@@ -700,12 +884,13 @@ function App() {
       camera.position.z = targetZ
     }
 
-    const switchScene = (state: string) => {
+    const switchScene = async (state: string) => {
       console.log('Switching Three.js scene to:', state)
       if (animationState === state) return
       animationState = state
       while(scene.children.length > 0) scene.remove(scene.children[0])
-      const objects = sceneInitializers[state]()
+      const result = sceneInitializers[state]()
+      const objects = result instanceof Promise ? await result : result
       objects.forEach((obj: any) => scene.add(obj))
     }
 
@@ -770,7 +955,7 @@ function App() {
     }
 
     return {
-      init: () => {
+      init: async () => {
         if (!canvasRef.current) return
 
         scene = new window.THREE.Scene()
@@ -808,7 +993,8 @@ function App() {
         setupCoordinatesTexture()
 
         // Initialize with quantum state
-        const initialObjects = sceneInitializers.quantum()
+        const result = sceneInitializers.quantum()
+        const initialObjects = result instanceof Promise ? await result : result
         initialObjects.forEach(obj => scene.add(obj))
 
         animate()
@@ -868,17 +1054,18 @@ function App() {
           {narrativeIndex === 1 && pixelZoomLevel < 0.2 && (
             <div className="absolute top-8 left-8 font-mono text-xs text-gray-400 space-y-1 animate-pulse">
               <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-purple-500 rounded-sm"></div>
-                <span className="text-purple-300">[16,16]</span>
+                <div className="w-3 h-3 bg-blue-400 rounded-sm"></div>
+                <span className="text-blue-300">[Center Pixel]</span>
               </div>
-              <div className="text-gray-500">RGB(127,89,203)</div>
+              <div className="text-gray-500">Single pixel view</div>
+              <div className="text-gray-600 text-xs">Zoom: {Math.floor(pixelZoomLevel * 100)}%</div>
             </div>
           )}
           
           {/* Zoom progress indicator */}
           {narrativeIndex === 1 && pixelZoomLevel > 0 && pixelZoomLevel < 1 && (
             <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 flex space-x-1">
-              {[0, 1/6, 2/6, 3/6, 4/6, 5/6].map((threshold, index) => (
+              {[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((threshold, index) => (
                 <div
                   key={index}
                   className={`w-2 h-2 rounded-full transition-all duration-300 ${
@@ -911,7 +1098,7 @@ function App() {
             </div>
             <div className="text-xs text-gray-500">
               {narrativeIndex === 1 && pixelZoomLevel < 1 ? 
-                `Scroll to zoom out (${Math.floor(pixelZoomLevel * 6) + 1}/6) | R to reset` : 
+                `Scroll to zoom out (${Math.floor(pixelZoomLevel * 10) + 1}/10) | R to reset` : 
                 narrativeIndex === 1 ? 
                 'Scroll to continue to next phase | R to reset' :
                 'Scroll or press Space/↓ to continue | R to reset'
