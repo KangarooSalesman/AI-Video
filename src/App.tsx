@@ -185,8 +185,8 @@ function App() {
             setPixelZoomLevel(currentZoom => {
               console.log('Current zoom in key callback:', currentZoom)
               
-              if (currentZoom < 0.99) { // Use 0.99 to avoid floating point precision issues
-                const newZoomLevel = Math.min(1, currentZoom + 0.1) // 10 steps for better progression
+              if (currentZoom < 1.19) { // Allow one extra step beyond 1.0
+                const newZoomLevel = Math.min(1.2, currentZoom + 0.2) // 6 steps total
                 console.log('Updating zoom level to:', newZoomLevel)
                 
                 // Update Three.js immediately with new value
@@ -196,8 +196,8 @@ function App() {
                 
                 return newZoomLevel
               } else {
-                // Only advance to next phase when fully zoomed out
-                console.log('Pixels zoom complete, advancing to next phase')
+                // Only advance to next phase after the extra scroll
+                console.log('Pixels zoom complete with full image shown, advancing to next phase')
           advanceNarrative()
                 return 0 // Reset for next time
               }
@@ -211,35 +211,89 @@ function App() {
     }
 
     const handleWheel = (e: WheelEvent) => {
-      if (!hasInteracted || e.deltaY <= 0) return
+      if (!hasInteracted) return
       
-      // Special handling for pixels phase - zoom out instead of advancing
-      if (narrativeIndex === 1) { // pixels phase
-        console.log('Pixels phase wheel event, current zoom level:', pixelZoomLevel)
-        
-        // Use callback form to get the most current state
-        setPixelZoomLevel(currentZoom => {
-          console.log('Current zoom in callback:', currentZoom)
-          
-          if (currentZoom < 0.99) { // Use 0.99 to avoid floating point precision issues
-            const newZoomLevel = Math.min(1, currentZoom + 0.1) // 10 steps for better progression
-            console.log('Updating zoom level to:', newZoomLevel)
-            
-            // Update Three.js immediately with new value
+      // Handle scrolling up to go back
+      if (e.deltaY < 0) {
+        // Scrolling up - go back
+        if (narrativeIndex === 1 && pixelZoomLevel > 0) {
+          // In pixels phase, zoom back in first
+          setPixelZoomLevel(currentZoom => {
+            const newZoomLevel = Math.max(0, currentZoom - 0.2) // 5 steps for going back
             if (threeAppRef.current) {
               threeAppRef.current.updatePixelZoom(newZoomLevel)
             }
-            
             return newZoomLevel
+          })
+          return
+        } else if (narrativeIndex > 0) {
+          // Go back to previous narrative
+          setIsTransitioning(true)
+          const newIndex = narrativeIndex - 1
+          setNarrativeIndex(newIndex)
+          
+          // Update content
+          if (narrativeRef.current) {
+            narrativeRef.current.classList.remove('visible')
+            
+            setTimeout(async () => {
+              const currentState = narrativeStates[newIndex]
+              let content = ''
+              if (currentState.title) {
+                const titleClass = newIndex === 0 ? "text-3xl md:text-4xl" : "text-2xl md:text-3xl"
+                content += `<h2 class="${titleClass} font-bold text-white mb-3">${currentState.title}</h2>`
+              }
+              content += `<p class="text-lg md:text-xl text-gray-300">${currentState.text}</p>`
+              
+              if (narrativeRef.current) {
+                narrativeRef.current.innerHTML = content
+                narrativeRef.current.classList.add('visible')
+              }
+              
+              // Switch Three.js scene
+              if (threeAppRef.current) {
+                await threeAppRef.current.switchScene(currentState.state)
+              }
+              
+              setIsTransitioning(false)
+            }, 500)
           } else {
-            // Only advance to next phase when fully zoomed out
-            console.log('Pixels zoom complete, advancing to next phase')
-            advanceNarrative()
-            return 0 // Reset for next time
+            setIsTransitioning(false)
           }
-        })
+        }
         return
       }
+      
+      // Handle scrolling down (original behavior)
+      if (e.deltaY <= 0) return
+      
+                // Special handling for pixels phase - zoom out instead of advancing
+          if (narrativeIndex === 1) { // pixels phase
+            console.log('Pixels phase wheel event, current zoom level:', pixelZoomLevel)
+            
+            // Use callback form to get the most current state
+            setPixelZoomLevel(currentZoom => {
+              console.log('Current zoom in callback:', currentZoom)
+              
+              if (currentZoom < 1.19) { // Allow one extra step beyond 1.0
+                const newZoomLevel = Math.min(1.2, currentZoom + 0.2) // 6 steps total (0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2)
+                console.log('Updating zoom level to:', newZoomLevel)
+                
+                // Update Three.js immediately with new value
+                if (threeAppRef.current) {
+                  threeAppRef.current.updatePixelZoom(newZoomLevel)
+                }
+                
+                return newZoomLevel
+              } else {
+                // Only advance to next phase after the extra scroll
+                console.log('Pixels zoom complete with full image shown, advancing to next phase')
+                advanceNarrative()
+                return 0 // Reset for next time
+              }
+            })
+            return
+          }
       
       console.log('Global wheel, advancing')
       advanceNarrative()
@@ -473,7 +527,7 @@ function App() {
     }
 
     // Function to load an external image file
-    const loadExternalImage = (imagePath: string): Promise<{data: Uint8Array, size: number}> => {
+    const loadExternalImage = (imagePath: string): Promise<{data: Uint8Array, width: number, height: number}> => {
       return new Promise((resolve) => {
         console.log('Attempting to load image from:', imagePath)
         const img = new Image()
@@ -484,19 +538,16 @@ function App() {
           const canvas = document.createElement('canvas')
           const ctx = canvas.getContext('2d')!
           
-          // Keep original resolution for better quality, but limit to reasonable size
-          const maxSize = 1024
-          let targetSize = Math.min(Math.max(img.width, img.height), maxSize)
+          // Keep original dimensions (1622x1080 for Seurat painting)
+          const targetWidth = img.width
+          const targetHeight = img.height
           
-          // Make sure it's a power of 2 for better zoom steps
-          targetSize = Math.pow(2, Math.floor(Math.log2(targetSize)))
+          canvas.width = targetWidth
+          canvas.height = targetHeight
+          ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
           
-          canvas.width = targetSize
-          canvas.height = targetSize
-          ctx.drawImage(img, 0, 0, targetSize, targetSize)
-          
-          const imageData = ctx.getImageData(0, 0, targetSize, targetSize)
-          const rgbData = new Uint8Array(targetSize * targetSize * 3)
+          const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight)
+          const rgbData = new Uint8Array(targetWidth * targetHeight * 3)
           
           for (let i = 0; i < imageData.data.length; i += 4) {
             const rgbIndex = (i / 4) * 3
@@ -505,8 +556,8 @@ function App() {
             rgbData[rgbIndex + 2] = imageData.data[i + 2] // B
           }
           
-          console.log('Image processed successfully, final size:', targetSize, 'RGB data length:', rgbData.length)
-          resolve({ data: rgbData, size: targetSize })
+          console.log('Image processed successfully, dimensions:', targetWidth, 'x', targetHeight, 'RGB data length:', rgbData.length)
+          resolve({ data: rgbData, width: targetWidth, height: targetHeight })
         }
         
         img.onerror = (error) => {
@@ -515,7 +566,8 @@ function App() {
           console.log('This is likely due to browser security restrictions for local files')
           console.log('Falling back to smiley face...')
           // Fallback to smiley face if image fails to load
-          resolve(createSampleImageData())
+          const sampleData = createSampleImageData()
+          resolve({ data: sampleData.data, width: sampleData.size, height: sampleData.size })
         }
         
         img.src = imagePath
@@ -599,7 +651,7 @@ function App() {
         // Create image texture from our sample data
         // You can easily switch between different images:
         // const imageData = createSampleImageData()      // Smiley face (current)
-        const imageData = await loadExternalImage('/ζζ.jpg') // Your image
+        const imageData = await loadExternalImage('/ζζ.jpg') // Seurat painting (1622x1080)
         
         // For external images, you have these options:
         // 1. Put your image in the public folder and use: await loadExternalImage('/your-image.png')
@@ -617,10 +669,10 @@ function App() {
         void loadImageFromFile
         
         const canvas = document.createElement('canvas')
-        canvas.width = imageData.size
-        canvas.height = imageData.size
+        canvas.width = imageData.width
+        canvas.height = imageData.height
         const ctx = canvas.getContext('2d')!
-        const imgData = ctx.createImageData(imageData.size, imageData.size)
+        const imgData = ctx.createImageData(canvas.width, canvas.height)
         
         for (let i = 0; i < imageData.data.length; i++) {
           imgData.data[i * 4] = imageData.data[i * 3]     // R
@@ -639,7 +691,10 @@ function App() {
             uTexture: { value: texture },
             uZoom: { value: 0.0 },
             uCenter: { value: new window.THREE.Vector2(0.5, 0.5) },
-            uImageSize: { value: imageData.size }
+            uImageWidth: { value: imageData.width },
+            uImageHeight: { value: imageData.height },
+            uImageData: { value: imageData.data },
+            uTime: { value: 0.0 }
           },
           vertexShader: `
             varying vec2 vUv;
@@ -652,43 +707,95 @@ function App() {
             uniform sampler2D uTexture;
             uniform float uZoom;
             uniform vec2 uCenter;
-            uniform float uImageSize;
+            uniform float uImageWidth;
+            uniform float uImageHeight;
             varying vec2 vUv;
             
             void main() {
-              // Calculate the zoom level (0 = single pixel, 1 = full image)
-              // Use exponential scaling for better visual progression
-              float zoomLevel = pow(2.0, uZoom * 10.0); // 2^0 to 2^10 = 1 to 1024 pixels
+              // Calculate the zoom level for 5 distinct steps
+              float zoomLevel;
               
-              // Calculate the size of the visible area in UV coordinates
-              float visibleSize = zoomLevel / uImageSize;
+              if (uZoom >= 0.8) {
+                // Step 5: Half resolution (811x540 for 1622x1080)
+                zoomLevel = max(uImageWidth, uImageHeight) * 0.5;
+              } else if (uZoom >= 0.6) {
+                // Step 4: 100x100 pixels
+                zoomLevel = 10000.0; // 100*100
+              } else if (uZoom >= 0.4) {
+                // Step 3: 10x10 pixels
+                zoomLevel = 100.0; // 10*10
+              } else if (uZoom >= 0.2) {
+                // Step 2: 4x3 pixels (maintaining aspect ratio)
+                zoomLevel = 12.0; // 4*3
+              } else {
+                // Step 1: 1x1 pixel
+                zoomLevel = 1.0;
+              }
               
-              // Calculate UV coordinates for the zoomed view
-              vec2 offset = (vUv - 0.5) * visibleSize;
-              vec2 sampleUV = uCenter + offset;
-              
-              // Clamp to texture bounds
-              sampleUV = clamp(sampleUV, 0.0, 1.0);
-              
-              // Calculate pixel size for grid effect
-              float pixelSize = 1.0 / uImageSize;
-              
-              // Sample the texture
               vec4 color;
               
-              if (uZoom < 0.8) {
-                // When zoomed in, show pixelated version with grid
-                vec2 pixelCoord = floor(sampleUV / pixelSize);
-                vec2 pixelUV = (pixelCoord + 0.5) * pixelSize;
+              if (uZoom > 1.0) {
+                // Extra scroll: Show full resolution smooth image
+                color = texture2D(uTexture, vUv);
+              } else {
+                // Steps 1-5: Show pixelated version with specific resolutions
+                float aspectRatio = uImageWidth / uImageHeight; // 1622/1080 ≈ 1.5
+                
+                vec2 pixelCount;
+                
+                if (uZoom < 0.2) {
+                  // Step 1: 1x1 pixel
+                  pixelCount = vec2(1.0, 1.0);
+                } else if (uZoom < 0.4) {
+                  // Step 2: 4x3 pixels
+                  pixelCount = vec2(4.0, 3.0);
+                } else if (uZoom < 0.6) {
+                  // Step 3: 10x10 pixels
+                  pixelCount = vec2(10.0, 10.0);
+                } else if (uZoom < 0.8) {
+                  // Step 4: 100x100 pixels
+                  pixelCount = vec2(100.0, 100.0);
+                } else {
+                  // Step 5: Half resolution (811x540)
+                  pixelCount = vec2(uImageWidth * 0.5, uImageHeight * 0.5);
+                }
+                
+                // Map the current UV to the pixel grid
+                vec2 pixelCoord = floor(vUv * pixelCount);
+                vec2 pixelUV = (pixelCoord + 0.5) / pixelCount;
+                
+                // Sample the texture at the pixel center
                 color = texture2D(uTexture, pixelUV);
                 
+                // For very zoomed in views (first two steps), darken specific pixels where text will be shown
+                if (uZoom < 0.4) { // First two steps (0-0.2 and 0.2-0.4)
+                  vec2 currentPixel = floor(vUv * pixelCount);
+                  bool isTextPixel = false;
+                  
+                  if (uZoom < 0.2) {
+                    // Step 1: Show text on 2 of the 4 pixels (top-left and bottom-right)
+                    if ((currentPixel.x == 0.0 && currentPixel.y == 0.0) ||
+                        (currentPixel.x == floor(pixelCount.x) - 1.0 && currentPixel.y == floor(pixelCount.y) - 1.0)) {
+                      isTextPixel = true;
+                    }
+                  } else if (uZoom < 0.4) {
+                    // Step 2: Show text on half of the visible pixels (checkerboard pattern)
+                    float pixelIndex = mod(currentPixel.x + currentPixel.y, 2.0);
+                    if (pixelIndex < 1.0) {
+                      isTextPixel = true;
+                    }
+                  }
+                  
+                  if (isTextPixel) {
+                    // Darken the pixel to make text more readable
+                    color.rgb = mix(color.rgb, vec3(0.1), 0.5);
+                  }
+                }
+                
                 // Add subtle grid lines to show pixel boundaries
-                vec2 grid = abs(fract(sampleUV / pixelSize) - 0.5);
-                float gridStrength = smoothstep(0.0, 0.02, min(grid.x, grid.y));
-                color.rgb = mix(vec3(0.2), color.rgb, gridStrength);
-              } else {
-                // When zoomed out, show smooth image
-                color = texture2D(uTexture, sampleUV);
+                vec2 grid = abs(fract(vUv * pixelCount) - 0.5);
+                float gridStrength = smoothstep(0.45, 0.5, max(grid.x, grid.y));
+                color.rgb = mix(color.rgb, vec3(0.2), gridStrength * 0.3);
               }
               
               gl_FragColor = color;
@@ -875,13 +982,9 @@ function App() {
       // Update shader uniform for zoom level
       pixelGroup.material.uniforms.uZoom.value = zoomLevel
       
-      // Adjust camera distance for dramatic effect
-      const targetZ = zoomLevel < 0.2 ? 15 :  // Close for single pixel view
-                     zoomLevel < 0.5 ? 12 :  // Medium-close for few pixels
-                     zoomLevel < 0.8 ? 10 :  // Medium distance
-                     8                       // Far for full image
-      
-      camera.position.z = targetZ
+      // Keep camera at consistent distance to maintain same viewport size
+      // The shader handles the pixel density, not the camera distance
+      camera.position.z = 10
     }
 
     const switchScene = async (state: string) => {
@@ -911,6 +1014,10 @@ function App() {
           break
         case 'pixels':
           // Pixel zoom animation is handled by updatePixelZoom
+          // Update time uniform for any potential animations
+          if (objects[0] && objects[0].material && objects[0].material.uniforms && objects[0].material.uniforms.uTime) {
+            objects[0].material.uniforms.uTime.value = Date.now() * 0.001
+          }
           break
         case 'coordinates':
           if (coordinatesCtx && Math.random() > 0.7) { 
@@ -1050,22 +1157,77 @@ function App() {
             style={{ textShadow: '0 0 10px rgba(204, 204, 204, 0.3)' }}
           />
           
-          {/* Pixel information overlay - only show during pixels phase when zoomed in */}
-          {narrativeIndex === 1 && pixelZoomLevel < 0.2 && (
-            <div className="absolute top-8 left-8 font-mono text-xs text-gray-400 space-y-1 animate-pulse">
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-blue-400 rounded-sm"></div>
-                <span className="text-blue-300">[Center Pixel]</span>
-              </div>
-              <div className="text-gray-500">Single pixel view</div>
+          {/* RGB Values Overlay - Step 1 and 2 */}
+          {narrativeIndex === 1 && pixelZoomLevel < 0.4 && (
+            <>
+                             {/* Step 1: Show RGB values on 2 of 4 pixels */}
+               {pixelZoomLevel < 0.2 && (
+                 <>
+                   {/* Top-left pixel (first pixel in 2x2 grid) */}
+                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[-25%] translate-y-[-25%] font-mono text-[8px] text-gray-400 text-center leading-tight opacity-70 pointer-events-none">
+                     <div className="text-shadow-sm">135,206,235</div>
+                     <div className="text-gray-600 text-[6px]">[0,0]</div>
+                   </div>
+                   {/* Bottom-right pixel (last pixel in 2x2 grid) */}
+                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[25%] translate-y-[25%] font-mono text-[8px] text-gray-400 text-center leading-tight opacity-70 pointer-events-none">
+                     <div className="text-shadow-sm">255,255,0</div>
+                     <div className="text-gray-600 text-[6px]">[1,1]</div>
+                   </div>
+                 </>
+               )}
+              
+              {/* Step 2: Show RGB values on half the pixels (4x3 grid, show checkerboard pattern) */}
+              {pixelZoomLevel >= 0.2 && pixelZoomLevel < 0.4 && (
+                <>
+                  {/* Top-left pixel (0,0) */}
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[-37.5%] translate-y-[-33%] font-mono text-[6px] text-gray-500 text-center leading-tight opacity-60 pointer-events-none">
+                    <div>135,206,235</div>
+                    <div className="text-gray-600 text-[5px]">[0,0]</div>
+                  </div>
+                  {/* Top-right pixel (1,0) - skip for checkerboard */}
+                  {/* Middle-left pixel (0,1) - skip for checkerboard */}
+                  {/* Middle-right pixel (1,1) */}
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[37.5%] translate-y-[0%] font-mono text-[6px] text-gray-500 text-center leading-tight opacity-60 pointer-events-none">
+                    <div>255,255,0</div>
+                    <div className="text-gray-600 text-[5px]">[1,1]</div>
+                  </div>
+                  {/* Bottom-left pixel (0,2) */}
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[-37.5%] translate-y-[33%] font-mono text-[6px] text-gray-500 text-center leading-tight opacity-60 pointer-events-none">
+                    <div>135,206,235</div>
+                    <div className="text-gray-600 text-[5px]">[0,2]</div>
+                  </div>
+                  {/* Bottom-right pixel (1,2) - skip for checkerboard */}
+                </>
+              )}
+            </>
+          )}
+          
+          {/* General pixel info for other zoom levels */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.4 && pixelZoomLevel < 0.8 && (
+            <div className="absolute top-8 left-8 font-mono text-xs text-gray-400 space-y-1">
+              <div className="text-gray-500">Pixel grid view</div>
               <div className="text-gray-600 text-xs">Zoom: {Math.floor(pixelZoomLevel * 100)}%</div>
             </div>
           )}
           
+          {/* Full image with description - only on extra scroll */}
+          {narrativeIndex === 1 && pixelZoomLevel > 1.0 && (
+            <div className="absolute top-8 right-8 max-w-sm">
+              <div className="bg-black bg-opacity-60 p-3 rounded text-right">
+                <h3 className="text-sm font-mono text-gray-400 mb-1">A Sunday Afternoon</h3>
+                <p className="text-xs text-gray-500 leading-tight">
+                  Seurat, 1886<br/>
+                  Pointillism - dots of color<br/>
+                  like pixels forming images
+                </p>
+              </div>
+            </div>
+          )}
+          
           {/* Zoom progress indicator */}
-          {narrativeIndex === 1 && pixelZoomLevel > 0 && pixelZoomLevel < 1 && (
+          {narrativeIndex === 1 && pixelZoomLevel > 0 && pixelZoomLevel <= 1.0 && (
             <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 flex space-x-1">
-              {[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((threshold, index) => (
+              {[0, 0.2, 0.4, 0.6, 0.8].map((threshold, index) => (
                 <div
                   key={index}
                   className={`w-2 h-2 rounded-full transition-all duration-300 ${
@@ -1097,9 +1259,9 @@ function App() {
               </svg>
             </div>
             <div className="text-xs text-gray-500">
-              {narrativeIndex === 1 && pixelZoomLevel < 1 ? 
-                `Scroll to zoom out (${Math.floor(pixelZoomLevel * 10) + 1}/10) | R to reset` : 
-                narrativeIndex === 1 ? 
+              {narrativeIndex === 1 && pixelZoomLevel <= 1.0 ? 
+                `Scroll to zoom out (${Math.floor(pixelZoomLevel * 5) + 1}/5) | R to reset` : 
+                narrativeIndex === 1 && pixelZoomLevel > 1.0 ? 
                 'Scroll to continue to next phase | R to reset' :
                 'Scroll or press Space/↓ to continue | R to reset'
               }
