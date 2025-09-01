@@ -368,6 +368,42 @@ function App() {
     }
   }, [hasInteracted, narrativeIndex, isTransitioning])
 
+  // Dynamic narrative updates during pixel phase based on zoom step
+  useEffect(() => {
+    if (narrativeIndex !== 1 || !narrativeRef.current) return
+    
+    const paintingTitle = 'A Sunday Afternoon on the Island of La Grande Jatte by Georges Seurat, 1886'
+    const paintingParagraph = 'Long before computers, artists were manually navigating the space of all possible images. Seurat placed each dot deliberately, like setting the value of a single pixel'
+    const titleClass = "text-2xl md:text-3xl"
+
+    let title = narrativeStates[1].title
+    let text = narrativeStates[1].text
+
+    if (pixelZoomLevel >= 0.2 && pixelZoomLevel < 0.4) {
+      // Step 2/6: explain the numbers shown (RGB and position)
+      title = narrativeStates[1].title
+      text = 'Those numbers are RGB values — 119 red, 136 green, 85 blue. They tell how much of each color the pixel has (0 = none, 255 = full). The [0,0] position is the origin of the image grid (top-left corner).'
+    } else if (pixelZoomLevel >= 0.8 && pixelZoomLevel < 1.0) {
+      // Step 5/6: show only the painting title
+      title = paintingTitle
+      text = ''
+    } else if (pixelZoomLevel >= 1.0) {
+      // Step 6/6: show painting title + paragraph details
+      title = paintingTitle
+      text = paintingParagraph
+    }
+
+    let content = ''
+    if (title) {
+      content += `<h2 class="${titleClass} font-bold text-white mb-3">${title}</h2>`
+    }
+    if (text) {
+      content += `<p class="text-lg md:text-xl text-gray-300">${text}</p>`
+    }
+
+    narrativeRef.current.innerHTML = content
+  }, [pixelZoomLevel, narrativeIndex])
+
   // Three.js initialization
   useEffect(() => {
     const script = document.createElement('script')
@@ -1415,7 +1451,7 @@ function App() {
         <footer className="text-center">
           <div 
             ref={narrativeRef}
-            className={`narrative-text max-w-2xl mx-auto text-gray-300 transition-opacity duration-500 ${narrativeIndex === 1 && pixelZoomLevel >= 0.6 ? 'opacity-0' : 'opacity-100'}`}
+            className={`narrative-text max-w-2xl mx-auto text-gray-300 transition-opacity duration-500 ${narrativeIndex === 1 && pixelZoomLevel >= 0.6 && pixelZoomLevel < 0.8 ? 'opacity-0' : 'opacity-100'}`}
             style={{ textShadow: '0 0 10px rgba(204, 204, 204, 0.3)' }}
           />
           
@@ -1482,17 +1518,7 @@ function App() {
 
           {/* Simplified: rely on shader-driven text for step 1; remove extra overlay */}
 
-          {/* Painting caption overlay: show title at step 5/5; show paragraph at step 6 */}
-          {narrativeIndex === 1 && pixelZoomLevel >= 0.8 && (
-            <div className="absolute bottom-8 left-8 max-w-sm bg-black/70 border border-gray-700 rounded-lg p-4 pointer-events-none">
-              <h3 className="text-sm font-mono text-gray-200">A Sunday Afternoon on the Island of La Grande Jatte by Georges Seurat, 1886</h3>
-              {pixelZoomLevel >= 1.0 && (
-                <p className="mt-1 text-xs text-gray-300 leading-snug">
-                  Long before computers, artists were manually navigating the space of all possible images. Seurat placed each dot deliberately, like setting the value of a single pixel
-                </p>
-              )}
-            </div>
-          )}
+          {/* Painting caption now appears in the main narrative area; removed bottom-left overlay */}
           
           <div 
             ref={scrollIndicatorRef}
