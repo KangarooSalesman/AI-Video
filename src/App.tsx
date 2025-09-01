@@ -185,8 +185,8 @@ function App() {
             setPixelZoomLevel(currentZoom => {
               console.log('Current zoom in key callback:', currentZoom)
               
-              if (currentZoom < 1.19) { // Allow one extra step beyond 1.0
-                const newZoomLevel = Math.min(1.2, currentZoom + 0.2) // 6 steps total
+              if (currentZoom < 0.99) { // 5 steps total  
+                const newZoomLevel = Math.min(1.0, currentZoom + 0.2) // 5 steps: (0, 0.2, 0.4, 0.6, 0.8, 1.0)
                 console.log('Updating zoom level to:', newZoomLevel)
                 
                 // Update Three.js immediately with new value
@@ -275,8 +275,8 @@ function App() {
             setPixelZoomLevel(currentZoom => {
               console.log('Current zoom in callback:', currentZoom)
               
-              if (currentZoom < 1.19) { // Allow one extra step beyond 1.0
-                const newZoomLevel = Math.min(1.2, currentZoom + 0.2) // 6 steps total (0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2)
+              if (currentZoom < 0.99) { // 5 steps total
+                const newZoomLevel = Math.min(1.0, currentZoom + 0.2) // 5 steps: (0, 0.2, 0.4, 0.6, 0.8, 1.0)
                 console.log('Updating zoom level to:', newZoomLevel)
                 
                 // Update Three.js immediately with new value
@@ -645,8 +645,11 @@ function App() {
       },
 
       'pixels': async () => {
-        // Create a simple plane with a shader that can zoom into pixels
-        const geometry = new window.THREE.PlaneGeometry(10, 10)
+        // Create a plane with correct aspect ratio for the image
+        const aspectRatio = 1622 / 1080 // 1.5
+        const height = 10
+        const width = height * aspectRatio // 15
+        const geometry = new window.THREE.PlaneGeometry(width, height)
         
         // Create image texture from our sample data
         // You can easily switch between different images:
@@ -734,8 +737,8 @@ function App() {
               
               vec4 color;
               
-              if (uZoom > 1.0) {
-                // Extra scroll: Show full resolution smooth image
+              if (uZoom >= 1.0) {
+                // Step 5: Show full resolution smooth image
                 color = texture2D(uTexture, vUv);
               } else {
                 // Steps 1-5: Show pixelated version with specific resolutions
@@ -767,30 +770,7 @@ function App() {
                 // Sample the texture at the pixel center
                 color = texture2D(uTexture, pixelUV);
                 
-                // For very zoomed in views (first two steps), darken specific pixels where text will be shown
-                if (uZoom < 0.4) { // First two steps (0-0.2 and 0.2-0.4)
-                  vec2 currentPixel = floor(vUv * pixelCount);
-                  bool isTextPixel = false;
-                  
-                  if (uZoom < 0.2) {
-                    // Step 1: Show text on 2 of the 4 pixels (top-left and bottom-right)
-                    if ((currentPixel.x == 0.0 && currentPixel.y == 0.0) ||
-                        (currentPixel.x == floor(pixelCount.x) - 1.0 && currentPixel.y == floor(pixelCount.y) - 1.0)) {
-                      isTextPixel = true;
-                    }
-                  } else if (uZoom < 0.4) {
-                    // Step 2: Show text on half of the visible pixels (checkerboard pattern)
-                    float pixelIndex = mod(currentPixel.x + currentPixel.y, 2.0);
-                    if (pixelIndex < 1.0) {
-                      isTextPixel = true;
-                    }
-                  }
-                  
-                  if (isTextPixel) {
-                    // Darken the pixel to make text more readable
-                    color.rgb = mix(color.rgb, vec3(0.1), 0.5);
-                  }
-                }
+                // No text overlay darkening needed anymore
                 
                 // Add subtle grid lines to show pixel boundaries
                 vec2 grid = abs(fract(vUv * pixelCount) - 0.5);
@@ -1157,49 +1137,24 @@ function App() {
             style={{ textShadow: '0 0 10px rgba(204, 204, 204, 0.3)' }}
           />
           
-          {/* RGB Values Overlay - Step 1 and 2 */}
-          {narrativeIndex === 1 && pixelZoomLevel < 0.4 && (
-            <>
-                             {/* Step 1: Show RGB values on 2 of 4 pixels */}
-               {pixelZoomLevel < 0.2 && (
-                 <>
-                   {/* Top-left pixel (first pixel in 2x2 grid) */}
-                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[-25%] translate-y-[-25%] font-mono text-[8px] text-gray-400 text-center leading-tight opacity-70 pointer-events-none">
-                     <div className="text-shadow-sm">135,206,235</div>
-                     <div className="text-gray-600 text-[6px]">[0,0]</div>
-                   </div>
-                   {/* Bottom-right pixel (last pixel in 2x2 grid) */}
-                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[25%] translate-y-[25%] font-mono text-[8px] text-gray-400 text-center leading-tight opacity-70 pointer-events-none">
-                     <div className="text-shadow-sm">255,255,0</div>
-                     <div className="text-gray-600 text-[6px]">[1,1]</div>
-                   </div>
-                 </>
-               )}
-              
-              {/* Step 2: Show RGB values on half the pixels (4x3 grid, show checkerboard pattern) */}
-              {pixelZoomLevel >= 0.2 && pixelZoomLevel < 0.4 && (
-                <>
-                  {/* Top-left pixel (0,0) */}
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[-37.5%] translate-y-[-33%] font-mono text-[6px] text-gray-500 text-center leading-tight opacity-60 pointer-events-none">
-                    <div>135,206,235</div>
-                    <div className="text-gray-600 text-[5px]">[0,0]</div>
-                  </div>
-                  {/* Top-right pixel (1,0) - skip for checkerboard */}
-                  {/* Middle-left pixel (0,1) - skip for checkerboard */}
-                  {/* Middle-right pixel (1,1) */}
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[37.5%] translate-y-[0%] font-mono text-[6px] text-gray-500 text-center leading-tight opacity-60 pointer-events-none">
-                    <div>255,255,0</div>
-                    <div className="text-gray-600 text-[5px]">[1,1]</div>
-                  </div>
-                  {/* Bottom-left pixel (0,2) */}
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 translate-x-[-37.5%] translate-y-[33%] font-mono text-[6px] text-gray-500 text-center leading-tight opacity-60 pointer-events-none">
-                    <div>135,206,235</div>
-                    <div className="text-gray-600 text-[5px]">[0,2]</div>
-                  </div>
-                  {/* Bottom-right pixel (1,2) - skip for checkerboard */}
-                </>
-              )}
-            </>
+          {/* RGB Values Overlay - Step 1 only */}
+          {narrativeIndex === 1 && pixelZoomLevel < 0.2 && (
+            <div className="absolute top-8 left-8 bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
+              <div className="text-xs text-gray-400 mb-2">Pixel Data Sample:</div>
+              <div className="space-y-1 font-mono text-xs">
+                <div className="flex items-center space-x-3">
+                  <div className="w-4 h-4 bg-blue-400 rounded-sm"></div>
+                  <div className="text-gray-300">RGB: (135, 206, 235)</div>
+                  <div className="text-gray-500">Position: [0,0]</div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-4 h-4 bg-yellow-400 rounded-sm"></div>
+                  <div className="text-gray-300">RGB: (255, 255, 0)</div>
+                  <div className="text-gray-500">Position: [1,1]</div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 mt-2">Each pixel = color + position</div>
+            </div>
           )}
           
           {/* General pixel info for other zoom levels */}
@@ -1210,8 +1165,8 @@ function App() {
             </div>
           )}
           
-          {/* Full image with description - only on extra scroll */}
-          {narrativeIndex === 1 && pixelZoomLevel > 1.0 && (
+          {/* Full image with description - at step 5 */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 1.0 && (
             <div className="absolute top-8 right-8 max-w-sm">
               <div className="bg-black bg-opacity-60 p-3 rounded text-right">
                 <h3 className="text-sm font-mono text-gray-400 mb-1">A Sunday Afternoon</h3>
@@ -1259,9 +1214,9 @@ function App() {
               </svg>
             </div>
             <div className="text-xs text-gray-500">
-              {narrativeIndex === 1 && pixelZoomLevel <= 1.0 ? 
+              {narrativeIndex === 1 && pixelZoomLevel < 1.0 ? 
                 `Scroll to zoom out (${Math.floor(pixelZoomLevel * 5) + 1}/5) | R to reset` : 
-                narrativeIndex === 1 && pixelZoomLevel > 1.0 ? 
+                narrativeIndex === 1 && pixelZoomLevel >= 1.0 ? 
                 'Scroll to continue to next phase | R to reset' :
                 'Scroll or press Space/↓ to continue | R to reset'
               }
