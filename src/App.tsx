@@ -5,6 +5,7 @@ interface ThreeJSApp {
   cleanup: () => void
   switchScene: (state: string) => Promise<void>
   updatePixelZoom: (zoomLevel: number) => void
+  updateImageZoom: (zoomLevel: number) => void
 }
 
 declare global {
@@ -23,6 +24,7 @@ function App() {
   const [narrativeIndex, setNarrativeIndex] = useState(-1)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [pixelZoomLevel, setPixelZoomLevel] = useState(0) // 0 = single pixel, 1 = zoomed out to full image
+  const [imageZoomLevel, setImageZoomLevel] = useState(1.0) // 1.0 = normal, higher = zoomed in
   
   const threeAppRef = useRef<ThreeJSApp | null>(null)
 
@@ -139,6 +141,7 @@ function App() {
     setNarrativeIndex(-1)
     setHasInteracted(false)
     setIsTransitioning(false)
+    setImageZoomLevel(1.0)
     
     if (narrativeRef.current) {
       narrativeRef.current.innerHTML = ''
@@ -163,6 +166,28 @@ function App() {
         e.preventDefault()
         resetExperience()
         return
+      }
+
+      // Image zoom controls for pixels phase
+      if (narrativeIndex === 1 && pixelZoomLevel >= 0.6) {
+        if (e.key === '+' || e.key === '=') {
+          e.preventDefault()
+          const newZoom = Math.min(imageZoomLevel * 1.5, 8.0)
+          setImageZoomLevel(newZoom)
+          if (threeAppRef.current) {
+            threeAppRef.current.updateImageZoom(newZoom)
+          }
+          return
+        }
+        if (e.key === '-' || e.key === '_') {
+          e.preventDefault()
+          const newZoom = Math.max(imageZoomLevel / 1.5, 1.0)
+          setImageZoomLevel(newZoom)
+          if (threeAppRef.current) {
+            threeAppRef.current.updateImageZoom(newZoom)
+          }
+          return
+        }
       }
       
       if (e.key === ' ' || e.key === 'ArrowDown') {
@@ -198,7 +223,9 @@ function App() {
               } else {
                 // Only advance to next phase after the extra scroll
                 console.log('Pixels zoom complete with full image shown, advancing to next phase')
-          advanceNarrative()
+                // Reset image zoom when advancing
+                setImageZoomLevel(1.0)
+                advanceNarrative()
                 return 0 // Reset for next time
               }
             })
@@ -688,6 +715,7 @@ function App() {
             uTexture: { value: texture },
             uTextTexture: { value: textTexture },
             uZoom: { value: 0.0 },
+            uImageZoom: { value: 1.0 },
             uCenter: { value: new window.THREE.Vector2(0.5, 0.5) },
             uImageWidth: { value: imageData.width },
             uImageHeight: { value: imageData.height },
@@ -709,6 +737,7 @@ function App() {
             uniform sampler2D uTexture;
             uniform sampler2D uTextTexture;
             uniform float uZoom;
+            uniform float uImageZoom;
             uniform vec2 uCenter;
             uniform float uImageWidth;
             uniform float uImageHeight;
@@ -719,9 +748,20 @@ function App() {
             void main() {
               vec4 color;
               
+              // Apply image zoom transformation
+              vec2 zoomedUV = vUv;
+              if (uImageZoom > 1.0) {
+                // Zoom in by scaling UV coordinates around center
+                vec2 center = vec2(0.5, 0.5);
+                zoomedUV = center + (vUv - center) / uImageZoom;
+                
+                // Clamp to prevent sampling outside texture bounds
+                zoomedUV = clamp(zoomedUV, 0.0, 1.0);
+              }
+              
               if (uZoom >= 1.0) {
                 // Step 5: Show full resolution smooth image
-                color = texture2D(uTexture, vUv);
+                color = texture2D(uTexture, zoomedUV);
               } else {
                 // Steps 1-4: Show pixelated version with specific resolutions
                 vec2 pixelCount;
@@ -744,14 +784,14 @@ function App() {
                 }
                 
                 // Map the current UV to the pixel grid
-                vec2 pixelCoord = floor(vUv * pixelCount);
+                vec2 pixelCoord = floor(zoomedUV * pixelCount);
                 vec2 pixelUV = (pixelCoord + 0.5) / pixelCount;
                 
                 // Sample the texture at the pixel center
                 color = texture2D(uTexture, pixelUV);
                 
                 // Add subtle grid lines to show pixel boundaries
-                vec2 grid = abs(fract(vUv * pixelCount) - 0.5);
+                vec2 grid = abs(fract(zoomedUV * pixelCount) - 0.5);
                 float gridStrength = smoothstep(0.45, 0.5, max(grid.x, grid.y));
                 color.rgb = mix(color.rgb, vec3(0.2), gridStrength * 0.3);
               }
@@ -965,14 +1005,26 @@ function App() {
       camera.position.z = 10
     }
 
+    const updateImageZoomInternal = (zoomLevel: number) => {
+      if (!pixelGroup || !pixelGroup.material) return
+      
+      // Update shader uniform for image zoom level
+      pixelGroup.material.uniforms.uImageZoom.value = zoomLevel
+      
+      // Update text overlay to show individual pixel values when zoomed in
+      if (pixelGroup.userData && pixelGroup.userData.textCtx) {
+        updateZoomedPixelTextOverlay(zoomLevel)
+      }
+    }
+
     const updatePixelTextOverlay = (zoomLevel: number) => {
       const { textCtx, textTexture, imageData } = pixelGroup.userData
       
       // Clear canvas
       textCtx.clearRect(0, 0, textCtx.canvas.width, textCtx.canvas.height)
       
-      // Only show text for first two zoom levels (1 pixel and 4x3 pixels)
-      if (zoomLevel >= 0.4) {
+      // Show text for first three zoom levels (1 pixel, 4x3 pixels, and 10x10 pixels)
+      if (zoomLevel >= 0.6) {
         textTexture.needsUpdate = true
         return
       }
@@ -983,10 +1035,14 @@ function App() {
         // Step 1: 1x1 pixel
         pixelCountX = 1
         pixelCountY = 1
-      } else {
+      } else if (zoomLevel < 0.4) {
         // Step 2: 4x3 pixels
         pixelCountX = 4
         pixelCountY = 3
+      } else {
+        // Step 3: 10x10 pixels
+        pixelCountX = 10
+        pixelCountY = 10
       }
       
       // Calculate screen dimensions and pixel positions
@@ -1012,14 +1068,27 @@ function App() {
       const startX = (canvasWidth - pixelCountX * pixelScreenWidth) / 2
       const startY = (canvasHeight - pixelCountY * pixelScreenHeight) / 2
       
-      // Set up text styling
-      const fontSize = Math.min(pixelScreenWidth / 8, pixelScreenHeight / 4, 24)
+      // Set up text styling based on zoom level
+      let fontSize
+      if (zoomLevel < 0.2) {
+        // For single pixel, use larger, more readable text
+        fontSize = Math.min(40, pixelScreenWidth / 6, pixelScreenHeight / 8)
+      } else if (zoomLevel < 0.4) {
+        // For 4x3 grid, medium text
+        fontSize = Math.min(pixelScreenWidth / 6, pixelScreenHeight / 3, 20)
+      } else {
+        // For 10x10 grid, small text
+        fontSize = Math.min(pixelScreenWidth / 8, pixelScreenHeight / 4, 12)
+      }
+      
       textCtx.font = `${fontSize}px monospace`
       textCtx.textAlign = 'center'
       textCtx.textBaseline = 'middle'
-      textCtx.fillStyle = 'rgba(255, 255, 255, 0.9)'
-      textCtx.strokeStyle = 'rgba(0, 0, 0, 0.8)'
-      textCtx.lineWidth = 2
+      textCtx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+      textCtx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
+      textCtx.lineWidth = Math.max(1, fontSize / 12)
+      
+      console.log(`Drawing text overlay for zoom level ${zoomLevel}, grid ${pixelCountX}x${pixelCountY}, fontSize: ${fontSize}`)
       
       // Draw RGB values for each visible pixel
       for (let y = 0; y < pixelCountY; y++) {
@@ -1037,16 +1106,104 @@ function App() {
           const g = imageData.data[pixelIndex + 1] || 0
           const b = imageData.data[pixelIndex + 2] || 0
           
-          // For the first pixel (1x1), show explanation text
+          // For the first pixel (1x1), show detailed explanation
           if (zoomLevel < 0.2) {
-            textCtx.strokeText(`RGB: (${r}, ${g}, ${b})`, centerX, centerY - fontSize)
-            textCtx.fillText(`RGB: (${r}, ${g}, ${b})`, centerX, centerY - fontSize)
-            textCtx.strokeText(`Position: [${x}, ${y}]`, centerX, centerY + fontSize)
-            textCtx.fillText(`Position: [${x}, ${y}]`, centerX, centerY + fontSize)
+            const line1 = `Red: ${r} (0-255)`
+            const line2 = `Green: ${g} (0-255)`
+            const line3 = `Blue: ${b} (0-255)`
+            const line4 = `Position: [${x}, ${y}]`
+            const line5 = `Each pixel = Color + Location`
+            
+            const lineHeight = fontSize * 0.8
+            const startOffset = -2 * lineHeight
+            
+            const lines = [line1, line2, line3, line4, line5]
+            lines.forEach((line: string, i: number) => {
+              const yPos = centerY + startOffset + (i * lineHeight)
+              textCtx.strokeText(line, centerX, yPos)
+              textCtx.fillText(line, centerX, yPos)
+            })
           } else {
-            // For 4x3 pixels, show only RGB values
-            textCtx.strokeText(`${r},${g},${b}`, centerX, centerY)
-            textCtx.fillText(`${r},${g},${b}`, centerX, centerY)
+            // For other zoom levels, show RGB and position
+            const rgbText = `${r},${g},${b}`
+            const posText = `[${x},${y}]`
+            
+            textCtx.strokeText(rgbText, centerX, centerY - fontSize * 0.3)
+            textCtx.fillText(rgbText, centerX, centerY - fontSize * 0.3)
+            textCtx.strokeText(posText, centerX, centerY + fontSize * 0.3)
+            textCtx.fillText(posText, centerX, centerY + fontSize * 0.3)
+          }
+        }
+      }
+      
+      textTexture.needsUpdate = true
+    }
+
+    const updateZoomedPixelTextOverlay = (imageZoomLevel: number) => {
+      const { textCtx, textTexture, imageData } = pixelGroup.userData
+      
+      // Clear canvas
+      textCtx.clearRect(0, 0, textCtx.canvas.width, textCtx.canvas.height)
+      
+      // Only show zoomed pixel text when image is zoomed in significantly
+      if (imageZoomLevel < 2.0) {
+        textTexture.needsUpdate = true
+        return
+      }
+      
+      // Calculate visible pixel grid based on zoom level
+      const canvasWidth = textCtx.canvas.width
+      const canvasHeight = textCtx.canvas.height
+      
+      // Estimate how many pixels are visible at this zoom level
+      const pixelsPerScreenWidth = Math.floor(imageData.width / imageZoomLevel)
+      const pixelsPerScreenHeight = Math.floor(imageData.height / imageZoomLevel)
+      
+      // Limit to reasonable numbers for performance
+      const maxPixels = 20
+      const visiblePixelsX = Math.min(pixelsPerScreenWidth, maxPixels)
+      const visiblePixelsY = Math.min(pixelsPerScreenHeight, maxPixels)
+      
+      if (visiblePixelsX <= 0 || visiblePixelsY <= 0) return
+      
+      // Calculate pixel size on screen
+      const pixelScreenWidth = canvasWidth / visiblePixelsX
+      const pixelScreenHeight = canvasHeight / visiblePixelsY
+      
+      // Set up text styling
+      const fontSize = Math.min(pixelScreenWidth / 8, pixelScreenHeight / 4, 16)
+      textCtx.font = `${fontSize}px monospace`
+      textCtx.textAlign = 'center'
+      textCtx.textBaseline = 'middle'
+      textCtx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+      textCtx.strokeStyle = 'rgba(0, 0, 0, 0.8)'
+      textCtx.lineWidth = Math.max(1, fontSize / 10)
+      
+      // Calculate the center position of the zoomed area
+      const centerImageX = imageData.width / 2
+      const centerImageY = imageData.height / 2
+      
+      // Draw RGB values for visible pixels
+      for (let y = 0; y < visiblePixelsY; y++) {
+        for (let x = 0; x < visiblePixelsX; x++) {
+          // Calculate screen position
+          const screenX = (x + 0.5) * pixelScreenWidth
+          const screenY = (y + 0.5) * pixelScreenHeight
+          
+          // Calculate corresponding image pixel
+          const imageX = Math.floor(centerImageX + (x - visiblePixelsX/2))
+          const imageY = Math.floor(centerImageY + (y - visiblePixelsY/2))
+          
+          // Ensure we're within image bounds
+          if (imageX >= 0 && imageX < imageData.width && imageY >= 0 && imageY < imageData.height) {
+            const pixelIndex = (imageY * imageData.width + imageX) * 3
+            const r = imageData.data[pixelIndex] || 0
+            const g = imageData.data[pixelIndex + 1] || 0
+            const b = imageData.data[pixelIndex + 2] || 0
+            
+            // Draw RGB values
+            textCtx.strokeText(`${r},${g},${b}`, screenX, screenY)
+            textCtx.fillText(`${r},${g},${b}`, screenX, screenY)
           }
         }
       }
@@ -1186,6 +1343,10 @@ function App() {
         updatePixelZoomInternal(zoomLevel)
       },
 
+      updateImageZoom: (zoomLevel: number) => {
+        updateImageZoomInternal(zoomLevel)
+      },
+
       cleanup: () => {
         if ((window as any).threeCleanup) {
           ;(window as any).threeCleanup()
@@ -1234,16 +1395,51 @@ function App() {
             </div>
           )}
           
-          {/* Full image with description - at step 5 */}
-          {narrativeIndex === 1 && pixelZoomLevel >= 1.0 && (
-            <div className="absolute top-8 right-8 max-w-sm">
-              <div className="bg-black bg-opacity-60 p-3 rounded text-right">
-                <h3 className="text-sm font-mono text-gray-400 mb-1">A Sunday Afternoon</h3>
-                <p className="text-xs text-gray-500 leading-tight">
-                  Seurat, 1886<br/>
-                  Pointillism - dots of color<br/>
-                  like pixels forming images
-                </p>
+          {/* Image zoom controls for steps 4/5 and 5/5 */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.6 && (
+            <div className="absolute top-8 right-8 pointer-events-auto">
+              <div className="bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
+                <div className="text-xs text-gray-400 mb-3">Image Zoom Controls</div>
+                <div className="flex space-x-2 mb-3">
+                  <button
+                    onClick={() => {
+                      const newZoom = Math.min(imageZoomLevel * 1.5, 8.0)
+                      setImageZoomLevel(newZoom)
+                      if (threeAppRef.current) {
+                        threeAppRef.current.updateImageZoom(newZoom)
+                      }
+                    }}
+                    className="px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600 transition-colors"
+                  >
+                    Zoom In (+)
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newZoom = Math.max(imageZoomLevel / 1.5, 1.0)
+                      setImageZoomLevel(newZoom)
+                      if (threeAppRef.current) {
+                        threeAppRef.current.updateImageZoom(newZoom)
+                      }
+                    }}
+                    className="px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600 transition-colors"
+                  >
+                    Zoom Out (-)
+                  </button>
+                </div>
+                <div className="text-xs text-gray-500">
+                  Zoom: {imageZoomLevel.toFixed(1)}x
+                  {imageZoomLevel > 2.0 && <div className="text-xs text-gray-400 mt-1">Individual pixel RGB values visible</div>}
+                </div>
+                {pixelZoomLevel >= 1.0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <h3 className="text-sm font-mono text-gray-400 mb-1">A Sunday Afternoon</h3>
+                    <p className="text-xs text-gray-500 leading-tight">
+                      Seurat, 1886<br/>
+                      Pointillism - dots of color<br/>
+                      like pixels forming images
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1287,6 +1483,8 @@ function App() {
                 `Scroll to zoom out (${Math.floor(pixelZoomLevel * 5) + 1}/5) | R to reset` : 
                 narrativeIndex === 1 && pixelZoomLevel >= 1.0 ? 
                 'Scroll to continue to next phase | R to reset' :
+                narrativeIndex === 1 && pixelZoomLevel >= 0.6 ?
+                'Use +/- or click buttons to zoom image | Scroll to continue | R to reset' :
                 'Scroll or press Space/↓ to continue | R to reset'
               }
             </div>
