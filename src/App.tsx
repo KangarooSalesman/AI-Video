@@ -168,11 +168,12 @@ function App() {
         return
       }
 
-      // Image zoom controls for pixels phase (start from 3/5 step)
-      if (narrativeIndex === 1 && pixelZoomLevel >= 0.4) {
+      // Image zoom controls for pixels phase (start from 4/5 step)
+      if (narrativeIndex === 1 && pixelZoomLevel >= 0.6) {
         if (e.key === '+' || e.key === '=') {
           e.preventDefault()
-          const newZoom = Math.min(imageZoomLevel * 2.0, 16.0)
+          const maxZoom = pixelZoomLevel >= 0.8 ? 64.0 : 32.0
+          const newZoom = Math.min(imageZoomLevel * 2.0, maxZoom)
           setImageZoomLevel(newZoom)
           if (threeAppRef.current) {
             threeAppRef.current.updateImageZoom(newZoom)
@@ -995,7 +996,7 @@ function App() {
       // Update shader uniform for zoom level
       pixelGroup.material.uniforms.uZoom.value = zoomLevel
       
-      // Update text overlay based on zoom level
+      // Update text overlay based on zoom level (always update to ensure step 1 appears)
       if (pixelGroup.userData && pixelGroup.userData.textCtx) {
         updatePixelTextOverlay(zoomLevel)
       }
@@ -1151,12 +1152,11 @@ function App() {
         return
       }
       
-      // Blur-in animation: ramp alpha and blur from 2x to 3x zoom
-      const t = Math.max(0, Math.min(1, (imageZoomLevel - 2.0) / 1.0))
+      // No blur-in animation; show values immediately once >= 2x
       textCtx.save()
-      textCtx.globalAlpha = t
+      textCtx.globalAlpha = 1
       textCtx.shadowColor = 'rgba(0,0,0,0.9)'
-      textCtx.shadowBlur = (1 - t) * 8
+      textCtx.shadowBlur = 0
 
       // Calculate visible pixel grid based on zoom level
       const canvasWidth = textCtx.canvas.width
@@ -1397,23 +1397,24 @@ function App() {
           
 
           
-          {/* General pixel info for other zoom levels (starts at 3/5) */}
-          {narrativeIndex === 1 && pixelZoomLevel >= 0.4 && pixelZoomLevel < 0.8 && (
+          {/* General pixel info for other zoom levels (starts at 4/5) */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.6 && pixelZoomLevel < 0.8 && (
             <div className="absolute top-8 left-8 font-mono text-xs text-gray-400 space-y-1">
               <div className="text-gray-500">Pixel grid view</div>
               <div className="text-gray-600 text-xs">Zoom: {Math.floor(pixelZoomLevel * 100)}%</div>
             </div>
           )}
           
-          {/* Image zoom controls start from 3/5 step */}
-          {narrativeIndex === 1 && pixelZoomLevel >= 0.4 && (
+          {/* Image zoom controls start from 4/5 step */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.6 && (
             <div className="absolute top-8 right-8 pointer-events-auto">
               <div className="bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
                 <div className="text-xs text-gray-400 mb-3">Image Zoom Controls</div>
                 <div className="flex space-x-2 mb-3">
                   <button
                     onClick={() => {
-                      const newZoom = Math.min(imageZoomLevel * 2.0, 16.0)
+                      const maxZoom = pixelZoomLevel >= 0.8 ? 64.0 : 32.0
+                      const newZoom = Math.min(imageZoomLevel * 2.0, maxZoom)
                       setImageZoomLevel(newZoom)
                       if (threeAppRef.current) {
                         threeAppRef.current.updateImageZoom(newZoom)
@@ -1436,20 +1437,7 @@ function App() {
                     Zoom Out (-)
                   </button>
                 </div>
-                <div className="text-xs text-gray-500">
-                  Zoom: {imageZoomLevel.toFixed(1)}x
-                  {imageZoomLevel > 2.0 && <div className="text-xs text-gray-400 mt-1">Individual pixel RGB values visible</div>}
-                </div>
-                {pixelZoomLevel >= 1.0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-700">
-                    <h3 className="text-sm font-mono text-gray-400 mb-1">A Sunday Afternoon</h3>
-                    <p className="text-xs text-gray-500 leading-tight">
-                      Seurat, 1886<br/>
-                      Pointillism - dots of color<br/>
-                      like pixels forming images
-                    </p>
-                  </div>
-                )}
+                <div className="text-xs text-gray-500">Zoom: {imageZoomLevel.toFixed(1)}x</div>
               </div>
             </div>
           )}
@@ -1465,6 +1453,34 @@ function App() {
                   }`}
                 />
               ))}
+            </div>
+          )}
+
+          {/* Step 1 hard-coded overlay: RGB, position, explanation */}
+          {narrativeIndex === 1 && pixelZoomLevel < 0.2 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center max-w-xl px-4">
+                <div className="text-white text-2xl font-bold drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">Pixel Basics</div>
+                <div className="mt-3 text-white/95 text-lg font-mono">
+                  <div>Red: 255 (0-255)</div>
+                  <div>Green: 192 (0-255)</div>
+                  <div>Blue: 203 (0-255)</div>
+                  <div className="mt-1">Position: [0, 0]</div>
+                </div>
+                <div className="mt-3 text-gray-300 text-sm leading-snug">
+                  Each pixel = color values (RGB) + its grid position. Together, these numbers define the image.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Painting caption overlay on top of image (steps 4/5 and 5/5) */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.8 && (
+            <div className="absolute bottom-8 left-8 max-w-sm bg-black/70 border border-gray-700 rounded-lg p-4 pointer-events-none">
+              <h3 className="text-sm font-mono text-gray-200">A Sunday Afternoon on the Island of La Grande Jatte by Georges Seurat, 1886</h3>
+              <p className="mt-1 text-xs text-gray-300 leading-snug">
+                Long before computers, artists were manually navigating the space of all possible images. Seurat placed each dot deliberately, like setting the value of a single pixel
+              </p>
             </div>
           )}
           
@@ -1493,8 +1509,8 @@ function App() {
                 `Scroll to zoom (${Math.floor(pixelZoomLevel * 5) + 1}/5) | R to reset` : 
                 narrativeIndex === 1 && pixelZoomLevel >= 1.0 ? 
                 'Scroll to continue to next phase | R to reset' :
-                narrativeIndex === 1 && pixelZoomLevel >= 0.4 ?
-                'Use +/- or click buttons to zoom image (2x steps) | Scroll to continue | R to reset' :
+                narrativeIndex === 1 && pixelZoomLevel >= 0.6 ?
+                'Use +/- or click buttons to zoom image (2x steps, up to 32x/64x) | Scroll to continue | R to reset' :
                 'Scroll or press Space/↓ to continue | R to reset'
               }
             </div>
