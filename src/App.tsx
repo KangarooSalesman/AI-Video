@@ -652,20 +652,7 @@ function App() {
         const geometry = new window.THREE.PlaneGeometry(width, height)
         
         // Create image texture from our sample data
-        // You can easily switch between different images:
-        // const imageData = createSampleImageData()      // Smiley face (current)
         const imageData = await loadExternalImage('/ζζ.jpg') // Seurat painting (1622x1080)
-        
-        // For external images, you have these options:
-        // 1. Put your image in the public folder and use: await loadExternalImage('/your-image.png')
-        // 2. Use a web URL: await loadExternalImage('https://example.com/image.jpg')
-        // 3. Local file paths don't work in browsers due to security restrictions
-        
-        // Example with web URL (uncomment to try):
-        // const imageData = await loadExternalImage('https://picsum.photos/200/200')
-        
-        // Example with public folder (put image in public/ folder first):
-        // const imageData = await loadExternalImage('/ζζ.png')
         
         // Suppress unused variable warnings
         void createLandscapeImageData
@@ -689,61 +676,54 @@ function App() {
         texture.magFilter = window.THREE.NearestFilter // Pixelated look
         texture.minFilter = window.THREE.NearestFilter
         
+        // Create text overlay canvas for RGB values
+        const textCanvas = document.createElement('canvas')
+        textCanvas.width = window.innerWidth
+        textCanvas.height = window.innerHeight
+        const textCtx = textCanvas.getContext('2d')!
+        const textTexture = new window.THREE.CanvasTexture(textCanvas)
+        
         const material = new window.THREE.ShaderMaterial({
           uniforms: {
             uTexture: { value: texture },
+            uTextTexture: { value: textTexture },
             uZoom: { value: 0.0 },
             uCenter: { value: new window.THREE.Vector2(0.5, 0.5) },
             uImageWidth: { value: imageData.width },
             uImageHeight: { value: imageData.height },
             uImageData: { value: imageData.data },
-            uTime: { value: 0.0 }
+            uTime: { value: 0.0 },
+            uShowText: { value: 1.0 }
           },
           vertexShader: `
             varying vec2 vUv;
+            varying vec2 vScreenPos;
             void main() {
               vUv = uv;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_Position = projectionMatrix * mvPosition;
+              vScreenPos = (gl_Position.xy / gl_Position.w) * 0.5 + 0.5;
             }
           `,
           fragmentShader: `
             uniform sampler2D uTexture;
+            uniform sampler2D uTextTexture;
             uniform float uZoom;
             uniform vec2 uCenter;
             uniform float uImageWidth;
             uniform float uImageHeight;
+            uniform float uShowText;
             varying vec2 vUv;
+            varying vec2 vScreenPos;
             
             void main() {
-              // Calculate the zoom level for 5 distinct steps
-              float zoomLevel;
-              
-              if (uZoom >= 0.8) {
-                // Step 5: Half resolution (811x540 for 1622x1080)
-                zoomLevel = max(uImageWidth, uImageHeight) * 0.5;
-              } else if (uZoom >= 0.6) {
-                // Step 4: 100x100 pixels
-                zoomLevel = 10000.0; // 100*100
-              } else if (uZoom >= 0.4) {
-                // Step 3: 10x10 pixels
-                zoomLevel = 100.0; // 10*10
-              } else if (uZoom >= 0.2) {
-                // Step 2: 4x3 pixels (maintaining aspect ratio)
-                zoomLevel = 12.0; // 4*3
-              } else {
-                // Step 1: 1x1 pixel
-                zoomLevel = 1.0;
-              }
-              
               vec4 color;
               
               if (uZoom >= 1.0) {
                 // Step 5: Show full resolution smooth image
                 color = texture2D(uTexture, vUv);
               } else {
-                // Steps 1-5: Show pixelated version with specific resolutions
-                float aspectRatio = uImageWidth / uImageHeight; // 1622/1080 ≈ 1.5
-                
+                // Steps 1-4: Show pixelated version with specific resolutions
                 vec2 pixelCount;
                 
                 if (uZoom < 0.2) {
@@ -770,12 +750,16 @@ function App() {
                 // Sample the texture at the pixel center
                 color = texture2D(uTexture, pixelUV);
                 
-                // No text overlay darkening needed anymore
-                
                 // Add subtle grid lines to show pixel boundaries
                 vec2 grid = abs(fract(vUv * pixelCount) - 0.5);
                 float gridStrength = smoothstep(0.45, 0.5, max(grid.x, grid.y));
                 color.rgb = mix(color.rgb, vec3(0.2), gridStrength * 0.3);
+              }
+              
+              // Overlay text for RGB values when appropriate
+              if (uShowText > 0.5 && uZoom < 0.6) {
+                vec4 textColor = texture2D(uTextTexture, vScreenPos);
+                color.rgb = mix(color.rgb, textColor.rgb, textColor.a);
               }
               
               gl_FragColor = color;
@@ -784,6 +768,15 @@ function App() {
         })
         
         pixelGroup = new window.THREE.Mesh(geometry, material)
+        
+        // Store references for text updates
+        pixelGroup.userData = {
+          textCanvas: textCanvas,
+          textCtx: textCtx,
+          textTexture: textTexture,
+          imageData: imageData
+        }
+        
         return [pixelGroup]
       },
 
@@ -962,9 +955,103 @@ function App() {
       // Update shader uniform for zoom level
       pixelGroup.material.uniforms.uZoom.value = zoomLevel
       
+      // Update text overlay based on zoom level
+      if (pixelGroup.userData && pixelGroup.userData.textCtx) {
+        updatePixelTextOverlay(zoomLevel)
+      }
+      
       // Keep camera at consistent distance to maintain same viewport size
       // The shader handles the pixel density, not the camera distance
       camera.position.z = 10
+    }
+
+    const updatePixelTextOverlay = (zoomLevel: number) => {
+      const { textCtx, textTexture, imageData } = pixelGroup.userData
+      
+      // Clear canvas
+      textCtx.clearRect(0, 0, textCtx.canvas.width, textCtx.canvas.height)
+      
+      // Only show text for first two zoom levels (1 pixel and 4x3 pixels)
+      if (zoomLevel >= 0.4) {
+        textTexture.needsUpdate = true
+        return
+      }
+      
+      // Get the pixel grid dimensions
+      let pixelCountX, pixelCountY
+      if (zoomLevel < 0.2) {
+        // Step 1: 1x1 pixel
+        pixelCountX = 1
+        pixelCountY = 1
+      } else {
+        // Step 2: 4x3 pixels
+        pixelCountX = 4
+        pixelCountY = 3
+      }
+      
+      // Calculate screen dimensions and pixel positions
+      const canvasWidth = textCtx.canvas.width
+      const canvasHeight = textCtx.canvas.height
+      
+      // Calculate the size and position of the image plane on screen
+      const aspectRatio = 1622 / 1080
+      const planeHeight = 10
+      const planeWidth = planeHeight * aspectRatio
+      
+      // Estimate screen projection (approximate)
+      const fov = 75 * Math.PI / 180
+      const distance = 10
+      const screenHeight = 2 * Math.tan(fov / 2) * distance
+      const screenWidth = screenHeight * (canvasWidth / canvasHeight)
+      
+      // Calculate pixel size on screen
+      const pixelScreenWidth = (planeWidth / pixelCountX) * (canvasWidth / screenWidth)
+      const pixelScreenHeight = (planeHeight / pixelCountY) * (canvasHeight / screenHeight)
+      
+      // Calculate starting position (center the grid)
+      const startX = (canvasWidth - pixelCountX * pixelScreenWidth) / 2
+      const startY = (canvasHeight - pixelCountY * pixelScreenHeight) / 2
+      
+      // Set up text styling
+      const fontSize = Math.min(pixelScreenWidth / 8, pixelScreenHeight / 4, 24)
+      textCtx.font = `${fontSize}px monospace`
+      textCtx.textAlign = 'center'
+      textCtx.textBaseline = 'middle'
+      textCtx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+      textCtx.strokeStyle = 'rgba(0, 0, 0, 0.8)'
+      textCtx.lineWidth = 2
+      
+      // Draw RGB values for each visible pixel
+      for (let y = 0; y < pixelCountY; y++) {
+        for (let x = 0; x < pixelCountX; x++) {
+          // Calculate the center position of this pixel on screen
+          const centerX = startX + (x + 0.5) * pixelScreenWidth
+          const centerY = startY + (y + 0.5) * pixelScreenHeight
+          
+          // Get the corresponding pixel from the image data
+          const imageX = Math.floor((x + 0.5) / pixelCountX * imageData.width)
+          const imageY = Math.floor((y + 0.5) / pixelCountY * imageData.height)
+          const pixelIndex = (imageY * imageData.width + imageX) * 3
+          
+          const r = imageData.data[pixelIndex] || 0
+          const g = imageData.data[pixelIndex + 1] || 0
+          const b = imageData.data[pixelIndex + 2] || 0
+          
+          // For the first pixel (1x1), show explanation text
+          if (zoomLevel < 0.2) {
+            textCtx.strokeText(`RGB: (${r}, ${g}, ${b})`, centerX, centerY - fontSize)
+            textCtx.fillText(`RGB: (${r}, ${g}, ${b})`, centerX, centerY - fontSize)
+            textCtx.strokeText(`Position: [${x}, ${y}]`, centerX, centerY + fontSize)
+            textCtx.fillText(`Position: [${x}, ${y}]`, centerX, centerY + fontSize)
+          } else {
+            // For 4x3 pixels, show only RGB values
+            textCtx.strokeText(`${r},${g},${b}`, centerX, centerY)
+            textCtx.fillText(`${r},${g},${b}`, centerX, centerY)
+          }
+        }
+      }
+      
+      textTexture.needsUpdate = true
     }
 
     const switchScene = async (state: string) => {
@@ -1137,25 +1224,7 @@ function App() {
             style={{ textShadow: '0 0 10px rgba(204, 204, 204, 0.3)' }}
           />
           
-          {/* RGB Values Overlay - Step 1 only */}
-          {narrativeIndex === 1 && pixelZoomLevel < 0.2 && (
-            <div className="absolute top-8 left-8 bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
-              <div className="text-xs text-gray-400 mb-2">Pixel Data Sample:</div>
-              <div className="space-y-1 font-mono text-xs">
-                <div className="flex items-center space-x-3">
-                  <div className="w-4 h-4 bg-blue-400 rounded-sm"></div>
-                  <div className="text-gray-300">RGB: (135, 206, 235)</div>
-                  <div className="text-gray-500">Position: [0,0]</div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-4 h-4 bg-yellow-400 rounded-sm"></div>
-                  <div className="text-gray-300">RGB: (255, 255, 0)</div>
-                  <div className="text-gray-500">Position: [1,1]</div>
-                </div>
-              </div>
-              <div className="text-xs text-gray-500 mt-2">Each pixel = color + position</div>
-            </div>
-          )}
+
           
           {/* General pixel info for other zoom levels */}
           {narrativeIndex === 1 && pixelZoomLevel >= 0.4 && pixelZoomLevel < 0.8 && (
