@@ -722,7 +722,7 @@ function App() {
             uImageHeight: { value: imageData.height },
             uImageData: { value: imageData.data },
             uTime: { value: 0.0 },
-            uShowText: { value: 1.0 }
+            uShowText: { value: 0.0 }
           },
           vertexShader: `
             varying vec2 vUv;
@@ -999,6 +999,30 @@ function App() {
       // Update text overlay based on zoom level (always update to ensure step 1 appears)
       if (pixelGroup.userData && pixelGroup.userData.textCtx) {
         updatePixelTextOverlay(zoomLevel)
+      }
+      
+      // Control when instructional text is shown. For the first single pixel, render text after the pixel appears.
+      if (pixelGroup.material.uniforms && pixelGroup.material.uniforms.uShowText) {
+        if (zoomLevel >= 0.4) {
+          // Hide text beyond the first two zoom levels
+          pixelGroup.material.uniforms.uShowText.value = 0.0
+          if (pixelGroup.userData) pixelGroup.userData.hasScheduledTextReveal = false
+        } else if (zoomLevel < 0.2) {
+          // Step 1: delay showing text by one frame
+          pixelGroup.material.uniforms.uShowText.value = 0.0
+          if (pixelGroup.userData && !pixelGroup.userData.hasScheduledTextReveal) {
+            pixelGroup.userData.hasScheduledTextReveal = true
+            requestAnimationFrame(() => {
+              if (pixelGroup && pixelGroup.material && pixelGroup.material.uniforms) {
+                pixelGroup.material.uniforms.uShowText.value = 1.0
+              }
+            })
+          }
+        } else {
+          // Step 2: show text immediately
+          pixelGroup.material.uniforms.uShowText.value = 1.0
+          if (pixelGroup.userData) pixelGroup.userData.hasScheduledTextReveal = false
+        }
       }
       
       // Keep camera at consistent distance to maintain same viewport size
@@ -1391,7 +1415,7 @@ function App() {
         <footer className="text-center">
           <div 
             ref={narrativeRef}
-            className="narrative-text max-w-2xl mx-auto text-gray-300"
+            className={`narrative-text max-w-2xl mx-auto text-gray-300 transition-opacity duration-500 ${narrativeIndex === 1 && pixelZoomLevel >= 0.6 ? 'opacity-0' : 'opacity-100'}`}
             style={{ textShadow: '0 0 10px rgba(204, 204, 204, 0.3)' }}
           />
           
@@ -1442,45 +1466,31 @@ function App() {
             </div>
           )}
           
-          {/* Zoom progress indicator */}
+          {/* Zoom progress indicator (6 steps including image load) */}
           {narrativeIndex === 1 && pixelZoomLevel > 0 && pixelZoomLevel <= 1.0 && (
             <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 flex space-x-1">
-              {[0, 0.2, 0.4, 0.6, 0.8].map((threshold, index) => (
+              {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map((threshold, index) => (
                 <div
                   key={index}
                   className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                    pixelZoomLevel > threshold ? 'bg-white' : 'bg-gray-700'
+                    pixelZoomLevel >= threshold ? 'bg-white' : 'bg-gray-700'
                   }`}
                 />
               ))}
             </div>
           )}
 
-          {/* Step 1 hard-coded overlay: RGB, position, explanation */}
-          {narrativeIndex === 1 && pixelZoomLevel < 0.2 && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center max-w-xl px-4">
-                <div className="text-white text-2xl font-bold drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">Pixel Basics</div>
-                <div className="mt-3 text-white/95 text-lg font-mono">
-                  <div>Red: 255 (0-255)</div>
-                  <div>Green: 192 (0-255)</div>
-                  <div>Blue: 203 (0-255)</div>
-                  <div className="mt-1">Position: [0, 0]</div>
-                </div>
-                <div className="mt-3 text-gray-300 text-sm leading-snug">
-                  Each pixel = color values (RGB) + its grid position. Together, these numbers define the image.
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Simplified: rely on shader-driven text for step 1; remove extra overlay */}
 
-          {/* Painting caption overlay on top of image (steps 4/5 and 5/5) */}
+          {/* Painting caption overlay: show title at step 5/5; show paragraph at step 6 */}
           {narrativeIndex === 1 && pixelZoomLevel >= 0.8 && (
             <div className="absolute bottom-8 left-8 max-w-sm bg-black/70 border border-gray-700 rounded-lg p-4 pointer-events-none">
               <h3 className="text-sm font-mono text-gray-200">A Sunday Afternoon on the Island of La Grande Jatte by Georges Seurat, 1886</h3>
-              <p className="mt-1 text-xs text-gray-300 leading-snug">
-                Long before computers, artists were manually navigating the space of all possible images. Seurat placed each dot deliberately, like setting the value of a single pixel
-              </p>
+              {pixelZoomLevel >= 1.0 && (
+                <p className="mt-1 text-xs text-gray-300 leading-snug">
+                  Long before computers, artists were manually navigating the space of all possible images. Seurat placed each dot deliberately, like setting the value of a single pixel
+                </p>
+              )}
             </div>
           )}
           
@@ -1506,9 +1516,9 @@ function App() {
             </div>
             <div className="text-xs text-gray-500">
               {narrativeIndex === 1 && pixelZoomLevel < 1.0 ? 
-                `Scroll to zoom (${Math.floor(pixelZoomLevel * 5) + 1}/5) | R to reset` : 
+                `Scroll to zoom (${Math.floor(pixelZoomLevel * 5) + 1}/6) | R to reset` : 
                 narrativeIndex === 1 && pixelZoomLevel >= 1.0 ? 
-                'Scroll to continue to next phase | R to reset' :
+                'Scroll to continue (6/6) | R to reset' :
                 narrativeIndex === 1 && pixelZoomLevel >= 0.6 ?
                 'Use +/- or click buttons to zoom image (2x steps, up to 32x/64x) | Scroll to continue | R to reset' :
                 'Scroll or press Space/↓ to continue | R to reset'
