@@ -168,11 +168,11 @@ function App() {
         return
       }
 
-      // Image zoom controls for pixels phase
-      if (narrativeIndex === 1 && pixelZoomLevel >= 0.6) {
+      // Image zoom controls for pixels phase (start from 3/5 step)
+      if (narrativeIndex === 1 && pixelZoomLevel >= 0.4) {
         if (e.key === '+' || e.key === '=') {
           e.preventDefault()
-          const newZoom = Math.min(imageZoomLevel * 1.5, 8.0)
+          const newZoom = Math.min(imageZoomLevel * 2.0, 16.0)
           setImageZoomLevel(newZoom)
           if (threeAppRef.current) {
             threeAppRef.current.updateImageZoom(newZoom)
@@ -181,7 +181,7 @@ function App() {
         }
         if (e.key === '-' || e.key === '_') {
           e.preventDefault()
-          const newZoom = Math.max(imageZoomLevel / 1.5, 1.0)
+          const newZoom = Math.max(imageZoomLevel / 2.0, 1.0)
           setImageZoomLevel(newZoom)
           if (threeAppRef.current) {
             threeAppRef.current.updateImageZoom(newZoom)
@@ -796,8 +796,8 @@ function App() {
                 color.rgb = mix(color.rgb, vec3(0.2), gridStrength * 0.3);
               }
               
-              // Overlay text for RGB values when appropriate
-              if (uShowText > 0.5 && uZoom < 0.6) {
+              // Overlay text for RGB values when appropriate (only steps 1-2)
+              if (uShowText > 0.5 && uZoom < 0.4) {
                 vec4 textColor = texture2D(uTextTexture, vScreenPos);
                 color.rgb = mix(color.rgb, textColor.rgb, textColor.a);
               }
@@ -1023,8 +1023,8 @@ function App() {
       // Clear canvas
       textCtx.clearRect(0, 0, textCtx.canvas.width, textCtx.canvas.height)
       
-      // Show text for first three zoom levels (1 pixel, 4x3 pixels, and 10x10 pixels)
-      if (zoomLevel >= 0.6) {
+      // Show text only for first two zoom levels (1 pixel and 4x3 pixels)
+      if (zoomLevel >= 0.4) {
         textTexture.needsUpdate = true
         return
       }
@@ -1040,7 +1040,7 @@ function App() {
         pixelCountX = 4
         pixelCountY = 3
       } else {
-        // Step 3: 10x10 pixels
+        // Step 3 and beyond hidden here (handled by high-zoom overlay)
         pixelCountX = 10
         pixelCountY = 10
       }
@@ -1072,7 +1072,7 @@ function App() {
       let fontSize
       if (zoomLevel < 0.2) {
         // For single pixel, use larger, more readable text
-        fontSize = Math.min(40, pixelScreenWidth / 6, pixelScreenHeight / 8)
+        fontSize = Math.max(24, Math.min(48, pixelScreenWidth / 6, pixelScreenHeight / 8))
       } else if (zoomLevel < 0.4) {
         // For 4x3 grid, medium text
         fontSize = Math.min(pixelScreenWidth / 6, pixelScreenHeight / 3, 20)
@@ -1084,8 +1084,8 @@ function App() {
       textCtx.font = `${fontSize}px monospace`
       textCtx.textAlign = 'center'
       textCtx.textBaseline = 'middle'
-      textCtx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-      textCtx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
+      textCtx.fillStyle = 'rgba(255, 255, 255, 1.0)'
+      textCtx.strokeStyle = 'rgba(0, 0, 0, 1.0)'
       textCtx.lineWidth = Math.max(1, fontSize / 12)
       
       console.log(`Drawing text overlay for zoom level ${zoomLevel}, grid ${pixelCountX}x${pixelCountY}, fontSize: ${fontSize}`)
@@ -1151,6 +1151,13 @@ function App() {
         return
       }
       
+      // Blur-in animation: ramp alpha and blur from 2x to 3x zoom
+      const t = Math.max(0, Math.min(1, (imageZoomLevel - 2.0) / 1.0))
+      textCtx.save()
+      textCtx.globalAlpha = t
+      textCtx.shadowColor = 'rgba(0,0,0,0.9)'
+      textCtx.shadowBlur = (1 - t) * 8
+
       // Calculate visible pixel grid based on zoom level
       const canvasWidth = textCtx.canvas.width
       const canvasHeight = textCtx.canvas.height
@@ -1201,13 +1208,16 @@ function App() {
             const g = imageData.data[pixelIndex + 1] || 0
             const b = imageData.data[pixelIndex + 2] || 0
             
-            // Draw RGB values
-            textCtx.strokeText(`${r},${g},${b}`, screenX, screenY)
-            textCtx.fillText(`${r},${g},${b}`, screenX, screenY)
+            // Draw RGB and position values
+            textCtx.strokeText(`${r},${g},${b}`, screenX, screenY - fontSize * 0.35)
+            textCtx.fillText(`${r},${g},${b}`, screenX, screenY - fontSize * 0.35)
+            textCtx.strokeText(`[${imageX},${imageY}]`, screenX, screenY + fontSize * 0.35)
+            textCtx.fillText(`[${imageX},${imageY}]`, screenX, screenY + fontSize * 0.35)
           }
         }
       }
       
+      textCtx.restore()
       textTexture.needsUpdate = true
     }
 
@@ -1387,7 +1397,7 @@ function App() {
           
 
           
-          {/* General pixel info for other zoom levels */}
+          {/* General pixel info for other zoom levels (starts at 3/5) */}
           {narrativeIndex === 1 && pixelZoomLevel >= 0.4 && pixelZoomLevel < 0.8 && (
             <div className="absolute top-8 left-8 font-mono text-xs text-gray-400 space-y-1">
               <div className="text-gray-500">Pixel grid view</div>
@@ -1395,15 +1405,15 @@ function App() {
             </div>
           )}
           
-          {/* Image zoom controls for steps 4/5 and 5/5 */}
-          {narrativeIndex === 1 && pixelZoomLevel >= 0.6 && (
+          {/* Image zoom controls start from 3/5 step */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.4 && (
             <div className="absolute top-8 right-8 pointer-events-auto">
               <div className="bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
                 <div className="text-xs text-gray-400 mb-3">Image Zoom Controls</div>
                 <div className="flex space-x-2 mb-3">
                   <button
                     onClick={() => {
-                      const newZoom = Math.min(imageZoomLevel * 1.5, 8.0)
+                      const newZoom = Math.min(imageZoomLevel * 2.0, 16.0)
                       setImageZoomLevel(newZoom)
                       if (threeAppRef.current) {
                         threeAppRef.current.updateImageZoom(newZoom)
@@ -1415,7 +1425,7 @@ function App() {
                   </button>
                   <button
                     onClick={() => {
-                      const newZoom = Math.max(imageZoomLevel / 1.5, 1.0)
+                      const newZoom = Math.max(imageZoomLevel / 2.0, 1.0)
                       setImageZoomLevel(newZoom)
                       if (threeAppRef.current) {
                         threeAppRef.current.updateImageZoom(newZoom)
@@ -1480,11 +1490,11 @@ function App() {
             </div>
             <div className="text-xs text-gray-500">
               {narrativeIndex === 1 && pixelZoomLevel < 1.0 ? 
-                `Scroll to zoom out (${Math.floor(pixelZoomLevel * 5) + 1}/5) | R to reset` : 
+                `Scroll to zoom (${Math.floor(pixelZoomLevel * 5) + 1}/5) | R to reset` : 
                 narrativeIndex === 1 && pixelZoomLevel >= 1.0 ? 
                 'Scroll to continue to next phase | R to reset' :
-                narrativeIndex === 1 && pixelZoomLevel >= 0.6 ?
-                'Use +/- or click buttons to zoom image | Scroll to continue | R to reset' :
+                narrativeIndex === 1 && pixelZoomLevel >= 0.4 ?
+                'Use +/- or click buttons to zoom image (2x steps) | Scroll to continue | R to reset' :
                 'Scroll or press Space/↓ to continue | R to reset'
               }
             </div>
