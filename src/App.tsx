@@ -1420,42 +1420,90 @@ function App() {
               coordinatesCtx.font = '20px monospace'
               coordinatesCtx.textAlign = 'left'
 
+              // Generate RGB values for this block
+              const r = Math.floor(Math.random() * 256)
+              const g = Math.floor(Math.random() * 256)
+              const b = Math.floor(Math.random() * 256)
+              const rgbColor = `rgb(${r}, ${g}, ${b})`
+
               const detailedVariations = [
+                {
+                  title: `RGB Color Display`,
+                  main: `RGB(${r}, ${g}, ${b})`,
+                  detail1: `Position: [${Math.floor(Math.random() * 1920)}, ${Math.floor(Math.random() * 1080)}]`,
+                  detail2: `Hex: #${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`,
+                  showColorTile: true,
+                  colorTileRGB: rgbColor
+                },
                 {
                   title: `Pixel Coordinate System`,
                   main: `Position: [${Math.floor(Math.random() * 1920)}, ${Math.floor(Math.random() * 1080)}]`,
-                  detail1: `RGB Values: (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`,
-                  detail2: `Hex Color: #${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`
+                  detail1: `RGB Values: (${r}, ${g}, ${b})`,
+                  detail2: `Hex Color: #${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`,
+                  showColorTile: true,
+                  colorTileRGB: rgbColor
                 },
                 {
                   title: `Color Space Mathematics`,
                   main: `HSV: (${Math.floor(Math.random() * 360)}°, ${Math.floor(Math.random() * 100)}%, ${Math.floor(Math.random() * 100)}%)`,
-                  detail1: `RGB Equivalent: (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`,
-                  detail2: `Color Theory: Hue × Saturation × Brightness`
+                  detail1: `RGB Equivalent: (${r}, ${g}, ${b})`,
+                  detail2: `Color Theory: Hue × Saturation × Brightness`,
+                  showColorTile: true,
+                  colorTileRGB: rgbColor
                 },
                 {
-                  title: `Digital Image Data`,
-                  main: `Resolution: ${800 + Math.floor(Math.random() * 1280)} × ${600 + Math.floor(Math.random() * 720)} pixels`,
-                  detail1: `Total Pixels: ${Math.floor(Math.random() * 1000000)}`,
-                  detail2: `Data Size: ${Math.floor(Math.random() * 10)} MB uncompressed`
+                  title: `Digital Color Spectrum`,
+                  main: `RGB(${r}, ${g}, ${b}) - 24-bit Color`,
+                  detail1: `Red Channel: ${r}/255 (${Math.round(r/255*100)}%)`,
+                  detail2: `Green: ${g}/255 (${Math.round(g/255*100)}%), Blue: ${b}/255 (${Math.round(b/255*100)}%)`,
+                  showColorTile: true,
+                  colorTileRGB: rgbColor
+                },
+                {
+                  title: `Image Pixel Data`,
+                  main: `Pixel at [${Math.floor(Math.random() * 100)}, ${Math.floor(Math.random() * 100)}]`,
+                  detail1: `RGB Values: (${r}, ${g}, ${b})`,
+                  detail2: `Brightness: ${Math.round((r + g + b) / 3)}/255`,
+                  showColorTile: true,
+                  colorTileRGB: rgbColor
                 },
                 {
                   title: `Coordinate Mapping`,
                   main: `Screen Position: (${Math.floor(Math.random() * window.innerWidth)}, ${Math.floor(Math.random() * window.innerHeight)})`,
-                  detail1: `Normalized: (${(Math.random()).toFixed(3)}, ${(Math.random()).toFixed(3)})`,
-                  detail2: `Matrix Index: [${Math.floor(Math.random() * 100)}, ${Math.floor(Math.random() * 100)}]`
+                  detail1: `RGB Color: (${r}, ${g}, ${b})`,
+                  detail2: `Normalized: (${(Math.random()).toFixed(3)}, ${(Math.random()).toFixed(3)})`,
+                  showColorTile: true,
+                  colorTileRGB: rgbColor
                 },
                 {
-                  title: `Binary Representation`,
-                  main: `Decimal: ${Math.floor(Math.random() * 16777215)}`,
-                  detail1: `Binary: ${Math.floor(Math.random() * 16777215).toString(2).padStart(24, '0').substring(0, 24)}`,
-                  detail2: `Hex: 0x${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase()}`
+                  title: `Binary Color Values`,
+                  main: `Decimal: ${r * 65536 + g * 256 + b}`,
+                  detail1: `RGB: (${r}, ${g}, ${b})`,
+                  detail2: `Binary: ${r.toString(2).padStart(8,'0')} ${g.toString(2).padStart(8,'0')} ${b.toString(2).padStart(8,'0')}`,
+                  showColorTile: true,
+                  colorTileRGB: rgbColor
+                },
+                {
+                  title: `Color Intensity Analysis`,
+                  main: `RGB(${r}, ${g}, ${b})`,
+                  detail1: `Max Channel: ${Math.max(r, g, b)}, Min Channel: ${Math.min(r, g, b)}`,
+                  detail2: `Color Temperature: ${r > g && r > b ? 'Warm' : g > r && g > b ? 'Natural' : 'Cool'}`,
+                  showColorTile: true,
+                  colorTileRGB: rgbColor
+                },
+                {
+                  title: `Digital Image Data`,
+                  main: `Resolution: ${800 + Math.floor(Math.random() * 1280)} × ${600 + Math.floor(Math.random() * 720)} pixels`,
+                  detail1: `Sample RGB: (${r}, ${g}, ${b})`,
+                  detail2: `Data Size: ${Math.floor(Math.random() * 10)} MB uncompressed`,
+                  showColorTile: false
                 },
                 {
                   title: `Image Mathematics`,
                   main: `Color Depth: 24-bit RGB (${Math.pow(2, 24)} colors)`,
                   detail1: `Pixel Neighbors: ±${Math.floor(Math.random() * 50)} RGB variation`,
-                  detail2: `Gradient Magnitude: ${Math.floor(Math.random() * 255)} intensity units`
+                  detail2: `Gradient Magnitude: ${Math.floor(Math.random() * 255)} intensity units`,
+                  showColorTile: false
                 }
               ]
 
@@ -1470,6 +1518,37 @@ function App() {
               coordinatesCtx.fillStyle = '#cccccc'
               coordinatesCtx.font = '18px monospace'
               coordinatesCtx.fillText(selectedInfo.main, region.x, region.y + 35)
+
+              // Draw color tile with glow effect if enabled
+              if (selectedInfo.showColorTile) {
+                const tileX = region.x + region.width - 80
+                const tileY = region.y + 10
+                const tileSize = 60
+
+                // Draw glow effect (multiple rectangles with decreasing opacity)
+                coordinatesCtx.save()
+                for (let i = 5; i >= 0; i--) {
+                  coordinatesCtx.fillStyle = selectedInfo.colorTileRGB.replace('rgb', 'rgba').replace(')', `, ${0.1 - i * 0.015})`)
+                  coordinatesCtx.fillRect(tileX - i * 2, tileY - i * 2, tileSize + i * 4, tileSize + i * 4)
+                }
+
+                // Draw main color tile
+                coordinatesCtx.fillStyle = selectedInfo.colorTileRGB
+                coordinatesCtx.fillRect(tileX, tileY, tileSize, tileSize)
+
+                // Draw border
+                coordinatesCtx.strokeStyle = '#ffffff'
+                coordinatesCtx.lineWidth = 2
+                coordinatesCtx.strokeRect(tileX, tileY, tileSize, tileSize)
+
+                // Add TV-like scanlines effect
+                coordinatesCtx.fillStyle = 'rgba(255, 255, 255, 0.1)'
+                for (let y = tileY; y < tileY + tileSize; y += 3) {
+                  coordinatesCtx.fillRect(tileX, y, tileSize, 1)
+                }
+
+                coordinatesCtx.restore()
+              }
 
               // Draw detail lines
               coordinatesCtx.fillStyle = '#aaaaaa'
