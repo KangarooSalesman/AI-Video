@@ -441,8 +441,9 @@ function App() {
     let pixelGroup: any
 
     // Coordinate animation state
-    let coordinateFadeStates: { [key: string]: { alpha: number, increasing: boolean, x: number, y: number, type: string } } = {}
+    let coordinateFadeStates: { [key: string]: { alpha: number, x: number, y: number, type: string, content?: string } } = {}
     let lastCoordinateUpdate = 0
+    let lastScatteredUpdate = 0
 
     const setupPixelsTexture = () => {
       columns = Math.floor(window.innerWidth / fontSize)
@@ -1328,108 +1329,171 @@ function App() {
           if (coordinatesCtx) {
             const currentTime = Date.now()
 
-            // Slower updates for new elements
-            if (Math.random() > 0.9) {
-              // Add new fading coordinate data points
+            // Faster scattered elements with fade-ins
+            if (Math.random() > 0.4 || currentTime - lastScatteredUpdate > 200) {
+              lastScatteredUpdate = currentTime
               const x = Math.floor(Math.random() * columns)
               const y = Math.floor(Math.random() * rows)
-              const types = ['numbers', 'coords', 'symbols']
+              const types = ['number', 'symbol', 'mini_coord', 'hex_value']
               const type = types[Math.floor(Math.random() * types.length)]
               const key = `${x}_${y}_${currentTime}`
 
+              let content = ''
+              let fontSizeToUse = '20px'
+
+              if (type === 'number') {
+                content = chars[Math.floor(Math.random() * chars.length)]
+              } else if (type === 'symbol') {
+                const symbols = ['[', ']', '(', ')', ',', '.', ':', ';', '+', '-', '*', '/', '=', '<', '>', '{', '}', '|', '&', '%', '#', '@', '!', '?']
+                content = symbols[Math.floor(Math.random() * symbols.length)]
+              } else if (type === 'mini_coord') {
+                content = `(${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)})`
+                fontSizeToUse = '14px'
+              } else if (type === 'hex_value') {
+                content = Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()
+                fontSizeToUse = '16px'
+              }
+
               coordinateFadeStates[key] = {
                 alpha: 0.0,
-                increasing: true,
                 x: x,
                 y: y,
-                type: type
+                type: type,
+                content: content
               }
             }
 
-            // Update fading elements
+            // Update all fading elements - faster fade-in
             Object.keys(coordinateFadeStates).forEach(key => {
               const state = coordinateFadeStates[key]
 
-              // Update alpha
-              if (state.increasing) {
-                state.alpha += 0.02
-                if (state.alpha >= 0.8) {
-                  state.increasing = false
-                }
-              } else {
-                state.alpha -= 0.01
-                if (state.alpha <= 0.1) {
-                  // Start fading out faster
-                  state.alpha -= 0.02
-                }
-                if (state.alpha <= 0) {
-                  delete coordinateFadeStates[key]
-                  return
-                }
+              // Faster fade-in
+              state.alpha += 0.08
+              if (state.alpha >= 1.0) {
+                state.alpha = 1.0
               }
 
               // Clear and redraw
               coordinatesCtx.fillStyle = '#000000'
-              coordinatesCtx.fillRect(state.x * fontSize, state.y * fontSize - fontSize, fontSize * 2, fontSize * 1.5)
+              coordinatesCtx.fillRect(state.x * fontSize, state.y * fontSize - fontSize, fontSize * 3, fontSize * 2)
 
-              // Set alpha for text
+              // Draw with alpha
               coordinatesCtx.save()
               coordinatesCtx.globalAlpha = state.alpha
 
-              coordinatesCtx.fillStyle = '#aaaaaa' // Less bright gray
-              coordinatesCtx.font = '18px monospace'
+              coordinatesCtx.fillStyle = '#ffffff'
+              coordinatesCtx.font = `${state.type === 'mini_coord' ? '14px' : state.type === 'hex_value' ? '16px' : '20px'} monospace`
 
-              if (state.type === 'numbers') {
-                coordinatesCtx.fillText(chars[Math.floor(Math.random() * chars.length)], state.x * fontSize, state.y * fontSize)
-              } else if (state.type === 'coords') {
-                const coord = `(${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)})`
-                coordinatesCtx.font = '14px monospace'
-                coordinatesCtx.fillText(coord, state.x * fontSize - 20, state.y * fontSize)
-              } else {
-                const symbols = ['[', ']', '(', ')', ',', '.', ':', ';', '+', '-', '*', '/', '=', '<', '>']
-                coordinatesCtx.fillText(symbols[Math.floor(Math.random() * symbols.length)], state.x * fontSize, state.y * fontSize)
+              if (state.content) {
+                coordinatesCtx.fillText(state.content, state.x * fontSize, state.y * fontSize)
               }
 
               coordinatesCtx.restore()
+
+              // Remove after full visibility for a bit
+              if (state.alpha >= 1.0 && Math.random() > 0.98) {
+                delete coordinateFadeStates[key]
+              }
             })
 
-            // Slower main coordinate updates with more variety
-            if (currentTime - lastCoordinateUpdate > 3000 && Math.random() > 0.97) {
+            // Scatter main coordinate information around the screen - more detailed and larger
+            if (currentTime - lastCoordinateUpdate > 3000) {
               lastCoordinateUpdate = currentTime
 
-              coordinatesCtx.fillStyle = '#000000'
-              coordinatesCtx.fillRect(20, 50, 900, 100)
+              // Choose random position on screen with larger regions
+              const screenRegions = [
+                { x: 20, y: 80, width: 550, height: 150 },     // Top left - larger
+                { x: window.innerWidth - 570, y: 80, width: 550, height: 150 },     // Top right - larger
+                { x: 20, y: window.innerHeight - 200, width: 550, height: 150 },    // Bottom left - larger
+                { x: window.innerWidth - 570, y: window.innerHeight - 200, width: 550, height: 150 }, // Bottom right - larger
+                { x: window.innerWidth / 2 - 275, y: window.innerHeight / 2 - 75, width: 550, height: 150 } // Center - larger
+              ]
 
-              coordinatesCtx.fillStyle = '#cccccc'
+              const region = screenRegions[Math.floor(Math.random() * screenRegions.length)]
+
+              // Clear larger area
+              coordinatesCtx.fillStyle = '#000000'
+              coordinatesCtx.fillRect(region.x - 15, region.y - 40, region.width + 30, region.height + 20)
+
+              // Draw more detailed coordinate information
+              coordinatesCtx.fillStyle = '#ffffff'
               coordinatesCtx.font = '20px monospace'
               coordinatesCtx.textAlign = 'left'
 
-              // More varied coordinate information
-              const variations = [
-                `Coordinates: (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}), (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`,
-                `Pixel Data: RGB(${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}) at position [${Math.floor(Math.random() * 100)}, ${Math.floor(Math.random() * 100)}]`,
-                `Color Space: HSV(${Math.floor(Math.random() * 360)}, ${Math.floor(Math.random() * 100)}%, ${Math.floor(Math.random() * 100)}%) → RGB(${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`,
-                `Image Map: ${Math.floor(Math.random() * 1000000)} possible variations, current: #${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
-                `Data Points: ${Array.from({length: 5}, () => `(${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)})`).join(' ')}`,
-                `Matrix Position: [${Math.floor(Math.random() * 1000)}, ${Math.floor(Math.random() * 1000)}] → Color: (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`
+              const detailedVariations = [
+                {
+                  title: `Pixel Coordinate System`,
+                  main: `Position: [${Math.floor(Math.random() * 1920)}, ${Math.floor(Math.random() * 1080)}]`,
+                  detail1: `RGB Values: (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`,
+                  detail2: `Hex Color: #${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`
+                },
+                {
+                  title: `Color Space Mathematics`,
+                  main: `HSV: (${Math.floor(Math.random() * 360)}°, ${Math.floor(Math.random() * 100)}%, ${Math.floor(Math.random() * 100)}%)`,
+                  detail1: `RGB Equivalent: (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`,
+                  detail2: `Color Theory: Hue × Saturation × Brightness`
+                },
+                {
+                  title: `Digital Image Data`,
+                  main: `Resolution: ${800 + Math.floor(Math.random() * 1280)} × ${600 + Math.floor(Math.random() * 720)} pixels`,
+                  detail1: `Total Pixels: ${Math.floor(Math.random() * 1000000)}`,
+                  detail2: `Data Size: ${Math.floor(Math.random() * 10)} MB uncompressed`
+                },
+                {
+                  title: `Coordinate Mapping`,
+                  main: `Screen Position: (${Math.floor(Math.random() * window.innerWidth)}, ${Math.floor(Math.random() * window.innerHeight)})`,
+                  detail1: `Normalized: (${(Math.random()).toFixed(3)}, ${(Math.random()).toFixed(3)})`,
+                  detail2: `Matrix Index: [${Math.floor(Math.random() * 100)}, ${Math.floor(Math.random() * 100)}]`
+                },
+                {
+                  title: `Binary Representation`,
+                  main: `Decimal: ${Math.floor(Math.random() * 16777215)}`,
+                  detail1: `Binary: ${Math.floor(Math.random() * 16777215).toString(2).padStart(24, '0').substring(0, 24)}`,
+                  detail2: `Hex: 0x${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase()}`
+                },
+                {
+                  title: `Image Mathematics`,
+                  main: `Color Depth: 24-bit RGB (${Math.pow(2, 24)} colors)`,
+                  detail1: `Pixel Neighbors: ±${Math.floor(Math.random() * 50)} RGB variation`,
+                  detail2: `Gradient Magnitude: ${Math.floor(Math.random() * 255)} intensity units`
+                }
               ]
 
-              const selectedVariation = variations[Math.floor(Math.random() * variations.length)]
-              coordinatesCtx.fillText(selectedVariation, 20, 80)
+              const selectedInfo = detailedVariations[Math.floor(Math.random() * detailedVariations.length)]
 
-              // Add secondary information
+              // Draw title
+              coordinatesCtx.fillStyle = '#ffffff'
+              coordinatesCtx.font = '22px monospace'
+              coordinatesCtx.fillText(selectedInfo.title, region.x, region.y)
+
+              // Draw main info
+              coordinatesCtx.fillStyle = '#cccccc'
+              coordinatesCtx.font = '18px monospace'
+              coordinatesCtx.fillText(selectedInfo.main, region.x, region.y + 35)
+
+              // Draw detail lines
+              coordinatesCtx.fillStyle = '#aaaaaa'
+              coordinatesCtx.font = '16px monospace'
+              coordinatesCtx.fillText(selectedInfo.detail1, region.x, region.y + 65)
+              coordinatesCtx.fillText(selectedInfo.detail2, region.x, region.y + 90)
+
+              // Add more context sometimes
               if (Math.random() > 0.6) {
-                coordinatesCtx.font = '16px monospace'
                 coordinatesCtx.fillStyle = '#888888'
-                const secondaryInfo = [
-                  'Binary: ' + Math.floor(Math.random() * 16777215).toString(2).padStart(24, '0'),
-                  'Hex: 0x' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase(),
-                  'Value: ' + Math.floor(Math.random() * 16777215),
-                  'Intensity: ' + Math.floor(Math.random() * 100) + '%',
-                  'Neighbors: ±' + Math.floor(Math.random() * 50) + ' RGB',
-                  'Resolution: ' + (100 + Math.floor(Math.random() * 900)) + '×' + (100 + Math.floor(Math.random() * 900))
+                coordinatesCtx.font = '14px monospace'
+
+                const contextInfo = [
+                  'Every pixel = unique coordinate in 16.7 million color space',
+                  'Image as mathematical function: f(x,y) → (r,g,b)',
+                  'Digital representation of infinite analog possibilities',
+                  'Coordinates map to exact color values in RGB space',
+                  'Each position contains complete color information',
+                  'Screen coordinate system: (0,0) to (width,height)',
+                  'Color values range: 0-255 per channel (8-bit)',
+                  'Total possible images: 256^(width×height×3)'
                 ]
-                coordinatesCtx.fillText(secondaryInfo[Math.floor(Math.random() * secondaryInfo.length)], 20, 110)
+
+                coordinatesCtx.fillText(contextInfo[Math.floor(Math.random() * contextInfo.length)], region.x, region.y + 120)
               }
             }
 
