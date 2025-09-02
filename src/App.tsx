@@ -172,7 +172,7 @@ function App() {
       if (narrativeIndex === 1 && pixelZoomLevel >= 0.6 && pixelZoomLevel < 1.0) {
         if (e.key === '+' || e.key === '=') {
           e.preventDefault()
-          const maxZoom = pixelZoomLevel >= 0.8 ? 64.0 : 32.0
+          const maxZoom = pixelZoomLevel >= 0.8 ? 128.0 : 32.0
           const newZoom = Math.min(imageZoomLevel * 2.0, maxZoom)
           setImageZoomLevel(newZoom)
           if (threeAppRef.current) {
@@ -1701,7 +1701,7 @@ function App() {
                 Georges Seurat, 1886
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                Seurat painted this masterpiece by placing thousands of individual dots of pure color
+                Seurat painted this artwork by placing thousands of individual dots of pure color
               </div>
               <div className="text-xs text-gray-400 mt-0.5">
                 Each dot blends optically in the viewer's eye to create the final image
@@ -1736,7 +1736,7 @@ function App() {
               <div className="flex justify-center space-x-3 mb-2">
                 <button
                   onClick={() => {
-                    const maxZoom = pixelZoomLevel >= 0.8 ? 64.0 : 32.0
+                    const maxZoom = pixelZoomLevel >= 0.8 ? 128.0 : 32.0
                     const newZoom = Math.min(imageZoomLevel * 2.0, maxZoom)
                     setImageZoomLevel(newZoom)
                     if (threeAppRef.current) {
