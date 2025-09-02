@@ -1727,39 +1727,41 @@ function App() {
             </div>
           )}
           
-          {/* Image zoom controls start from 4/5 step, but disabled on last slide (6/6) */}
+          {/* Zoom controls appear where old narrative titles were - center bottom */}
           {narrativeIndex === 1 && pixelZoomLevel >= 0.6 && pixelZoomLevel < 1.0 && (
-            <div className="absolute top-8 right-8 pointer-events-auto">
-              <div className="bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
-                <div className="text-xs text-gray-400 mb-3">Image Zoom Controls</div>
-                <div className="flex space-x-2 mb-3">
-                  <button
-                    onClick={() => {
-                      const maxZoom = pixelZoomLevel >= 0.8 ? 64.0 : 32.0
-                      const newZoom = Math.min(imageZoomLevel * 2.0, maxZoom)
-                      setImageZoomLevel(newZoom)
-                      if (threeAppRef.current) {
-                        threeAppRef.current.updateImageZoom(newZoom)
-                      }
-                    }}
-                    className="px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600 transition-colors"
-                  >
-                    Zoom In (+)
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newZoom = Math.max(imageZoomLevel / 2.0, 1.0)
-                      setImageZoomLevel(newZoom)
-                      if (threeAppRef.current) {
-                        threeAppRef.current.updateImageZoom(newZoom)
-                      }
-                    }}
-                    className="px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600 transition-colors"
-                  >
-                    Zoom Out (-)
-                  </button>
-                </div>
-                <div className="text-xs text-gray-500">Zoom: {imageZoomLevel.toFixed(1)}x</div>
+            <div className="text-center pointer-events-auto mb-8">
+              <div className="text-sm font-normal text-white/80 tracking-normal mb-3">
+                Zoom in to see individual pixels
+              </div>
+              <div className="flex justify-center space-x-3 mb-2">
+                <button
+                  onClick={() => {
+                    const maxZoom = pixelZoomLevel >= 0.8 ? 64.0 : 32.0
+                    const newZoom = Math.min(imageZoomLevel * 2.0, maxZoom)
+                    setImageZoomLevel(newZoom)
+                    if (threeAppRef.current) {
+                      threeAppRef.current.updateImageZoom(newZoom)
+                    }
+                  }}
+                  className="px-4 py-1 bg-white/10 text-white/90 rounded text-sm hover:bg-white/20 transition-colors border border-white/20"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => {
+                    const newZoom = Math.max(imageZoomLevel / 2.0, 1.0)
+                    setImageZoomLevel(newZoom)
+                    if (threeAppRef.current) {
+                      threeAppRef.current.updateImageZoom(newZoom)
+                    }
+                  }}
+                  className="px-4 py-1 bg-white/10 text-white/90 rounded text-sm hover:bg-white/20 transition-colors border border-white/20"
+                >
+                  −
+                </button>
+              </div>
+              <div className="text-xs text-white/60">
+                {imageZoomLevel.toFixed(1)}x
               </div>
             </div>
           )}
