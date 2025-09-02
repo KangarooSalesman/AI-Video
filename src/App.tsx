@@ -440,6 +440,10 @@ function App() {
 
     let pixelGroup: any
 
+    // Coordinate animation state
+    let coordinateFadeStates: { [key: string]: { alpha: number, increasing: boolean, x: number, y: number, type: string } } = {}
+    let lastCoordinateUpdate = 0
+
     const setupPixelsTexture = () => {
       columns = Math.floor(window.innerWidth / fontSize)
       rows = Math.floor(window.innerHeight / fontSize)
@@ -457,7 +461,7 @@ function App() {
       pixelsTexture = new window.THREE.CanvasTexture(pixelsCanvas)
     }
 
-    const setupCoordinatesTexture = () => {
+        const setupCoordinatesTexture = () => {
       coordinatesCanvas = document.createElement('canvas')
       coordinatesCanvas.width = window.innerWidth
       coordinatesCanvas.height = window.innerHeight
@@ -465,18 +469,20 @@ function App() {
       coordinatesCtx.font = `${fontSize}px monospace`
       coordinatesCtx.textAlign = 'center'
       coordinatesCtx.textBaseline = 'middle'
-      
+
       coordinatesCtx.fillStyle = '#000000'
       coordinatesCtx.fillRect(0, 0, coordinatesCanvas.width, coordinatesCanvas.height)
-      
-      // Add some sample image coordinates text
-      coordinatesCtx.fillStyle = '#4a4a4a'
-      coordinatesCtx.font = '12px monospace'
+
+      // Add initial coordinate data with more variety - less bright
+      coordinatesCtx.fillStyle = '#cccccc'
+      coordinatesCtx.font = '20px monospace'
       coordinatesCtx.textAlign = 'left'
-      coordinatesCtx.fillText('Image: landscape_sunset.jpg', 20, 30)
-      coordinatesCtx.fillText('Coordinates: (127, 89, 45), (255, 201, 156), (34, 67, 123)', 20, 50)
-      coordinatesCtx.fillText('Position: [0,0] [1,0] [2,0] [0,1] [1,1] [2,1]...', 20, 70)
-      
+      coordinatesCtx.fillText('Image Database: 256^3 = 16,777,216 possible colors', 20, 30)
+      coordinatesCtx.fillText('Coordinates: (127, 89, 45), (255, 201, 156), (34, 67, 123)', 20, 60)
+      coordinatesCtx.fillText('Position: [0,0] [1,0] [2,0] [0,1] [1,1] [2,1]...', 20, 90)
+      coordinatesCtx.fillText('RGB Values: Red=0-255, Green=0-255, Blue=0-255', 20, 120)
+      coordinatesCtx.fillText('Total Combinations: 16,777,216 × image_size', 20, 150)
+
       coordinatesTexture = new window.THREE.CanvasTexture(coordinatesCanvas)
     }
 
@@ -862,14 +868,15 @@ function App() {
       },
 
       'coordinates': () => {
-        const vFOV = window.THREE.MathUtils.degToRad(camera.fov)
-        const height = 2 * Math.tan(vFOV / 2) * camera.position.z
-        const width = height * camera.aspect
+        // Use same dimensions as the previous image (Seurat painting)
+        const aspectRatio = 1622 / 1080 // Same as pixels phase
+        const height = 10 // Same height as pixels phase
+        const width = height * aspectRatio // Same width as pixels phase
         const geometry = new window.THREE.PlaneGeometry(width, height)
-        const material = new window.THREE.MeshBasicMaterial({ 
-          map: coordinatesTexture, 
-          transparent: true, 
-          opacity: 0.8 
+        const material = new window.THREE.MeshBasicMaterial({
+          map: coordinatesTexture,
+          transparent: true,
+          opacity: 0.8
         })
         const plane = new window.THREE.Mesh(geometry, material)
         return [plane]
@@ -1318,28 +1325,114 @@ function App() {
           }
           break
         case 'coordinates':
-          if (coordinatesCtx && Math.random() > 0.7) { 
-            // Clear some areas and add new numbers
-            for (let i = 0; i < 50; i++) { 
+          if (coordinatesCtx) {
+            const currentTime = Date.now()
+
+            // Slower updates for new elements
+            if (Math.random() > 0.9) {
+              // Add new fading coordinate data points
               const x = Math.floor(Math.random() * columns)
               const y = Math.floor(Math.random() * rows)
-              coordinatesCtx.fillStyle = '#000000'
-              coordinatesCtx.fillRect(x * fontSize, y * fontSize - fontSize, fontSize, fontSize * 1.1)
-              coordinatesCtx.fillStyle = '#666666'
-              coordinatesCtx.fillText(chars[Math.floor(Math.random() * chars.length)], x * fontSize, y * fontSize)
+              const types = ['numbers', 'coords', 'symbols']
+              const type = types[Math.floor(Math.random() * types.length)]
+              const key = `${x}_${y}_${currentTime}`
+
+              coordinateFadeStates[key] = {
+                alpha: 0.0,
+                increasing: true,
+                x: x,
+                y: y,
+                type: type
+              }
             }
-            // Occasionally update the coordinate text
-            if (Math.random() > 0.95) {
+
+            // Update fading elements
+            Object.keys(coordinateFadeStates).forEach(key => {
+              const state = coordinateFadeStates[key]
+
+              // Update alpha
+              if (state.increasing) {
+                state.alpha += 0.02
+                if (state.alpha >= 0.8) {
+                  state.increasing = false
+                }
+              } else {
+                state.alpha -= 0.01
+                if (state.alpha <= 0.1) {
+                  // Start fading out faster
+                  state.alpha -= 0.02
+                }
+                if (state.alpha <= 0) {
+                  delete coordinateFadeStates[key]
+                  return
+                }
+              }
+
+              // Clear and redraw
               coordinatesCtx.fillStyle = '#000000'
-              coordinatesCtx.fillRect(20, 40, 600, 20)
-              coordinatesCtx.fillStyle = '#4a4a4a'
-              coordinatesCtx.font = '12px monospace'
+              coordinatesCtx.fillRect(state.x * fontSize, state.y * fontSize - fontSize, fontSize * 2, fontSize * 1.5)
+
+              // Set alpha for text
+              coordinatesCtx.save()
+              coordinatesCtx.globalAlpha = state.alpha
+
+              coordinatesCtx.fillStyle = '#aaaaaa' // Less bright gray
+              coordinatesCtx.font = '18px monospace'
+
+              if (state.type === 'numbers') {
+                coordinatesCtx.fillText(chars[Math.floor(Math.random() * chars.length)], state.x * fontSize, state.y * fontSize)
+              } else if (state.type === 'coords') {
+                const coord = `(${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)})`
+                coordinatesCtx.font = '14px monospace'
+                coordinatesCtx.fillText(coord, state.x * fontSize - 20, state.y * fontSize)
+              } else {
+                const symbols = ['[', ']', '(', ')', ',', '.', ':', ';', '+', '-', '*', '/', '=', '<', '>']
+                coordinatesCtx.fillText(symbols[Math.floor(Math.random() * symbols.length)], state.x * fontSize, state.y * fontSize)
+              }
+
+              coordinatesCtx.restore()
+            })
+
+            // Slower main coordinate updates with more variety
+            if (currentTime - lastCoordinateUpdate > 3000 && Math.random() > 0.97) {
+              lastCoordinateUpdate = currentTime
+
+              coordinatesCtx.fillStyle = '#000000'
+              coordinatesCtx.fillRect(20, 50, 900, 100)
+
+              coordinatesCtx.fillStyle = '#cccccc'
+              coordinatesCtx.font = '20px monospace'
               coordinatesCtx.textAlign = 'left'
-              const r = Math.floor(Math.random() * 256)
-              const g = Math.floor(Math.random() * 256)
-              const b = Math.floor(Math.random() * 256)
-              coordinatesCtx.fillText(`Coordinates: (${r}, ${g}, ${b}), (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`, 20, 50)
+
+              // More varied coordinate information
+              const variations = [
+                `Coordinates: (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}), (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`,
+                `Pixel Data: RGB(${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}) at position [${Math.floor(Math.random() * 100)}, ${Math.floor(Math.random() * 100)}]`,
+                `Color Space: HSV(${Math.floor(Math.random() * 360)}, ${Math.floor(Math.random() * 100)}%, ${Math.floor(Math.random() * 100)}%) → RGB(${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`,
+                `Image Map: ${Math.floor(Math.random() * 1000000)} possible variations, current: #${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
+                `Data Points: ${Array.from({length: 5}, () => `(${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)})`).join(' ')}`,
+                `Matrix Position: [${Math.floor(Math.random() * 1000)}, ${Math.floor(Math.random() * 1000)}] → Color: (${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`
+              ]
+
+              const selectedVariation = variations[Math.floor(Math.random() * variations.length)]
+              coordinatesCtx.fillText(selectedVariation, 20, 80)
+
+              // Add secondary information
+              if (Math.random() > 0.6) {
+                coordinatesCtx.font = '16px monospace'
+                coordinatesCtx.fillStyle = '#888888'
+                const secondaryInfo = [
+                  'Binary: ' + Math.floor(Math.random() * 16777215).toString(2).padStart(24, '0'),
+                  'Hex: 0x' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase(),
+                  'Value: ' + Math.floor(Math.random() * 16777215),
+                  'Intensity: ' + Math.floor(Math.random() * 100) + '%',
+                  'Neighbors: ±' + Math.floor(Math.random() * 50) + ' RGB',
+                  'Resolution: ' + (100 + Math.floor(Math.random() * 900)) + '×' + (100 + Math.floor(Math.random() * 900))
+                ]
+                coordinatesCtx.fillText(secondaryInfo[Math.floor(Math.random() * secondaryInfo.length)], 20, 110)
+              }
             }
+
             if(coordinatesTexture) coordinatesTexture.needsUpdate = true
           }
           break
