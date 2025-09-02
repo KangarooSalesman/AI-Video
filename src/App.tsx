@@ -373,7 +373,7 @@ function App() {
     if (narrativeIndex !== 1 || !narrativeRef.current) return
     
     const paintingTitle = 'A Sunday Afternoon on the Island of La Grande Jatte by Georges Seurat, 1886'
-    const paintingParagraph = 'Long before computers, artists were manually navigating the space of all possible images. Seurat placed each dot deliberately, like setting the value of a single pixel'
+    const paintingParagraph = 'Long before computers, artists were manually navigating the space of all possible images. Each of Seurat’s dots functioned like an early pixel, long before screens existed.'
     const titleClass = "text-2xl md:text-3xl"
 
     let title = narrativeStates[1].title
@@ -1691,14 +1691,20 @@ function App() {
             </button>
           </div>
 
-          {/* Painting title overlay for step 5/6 */}
-          {narrativeIndex === 1 && pixelZoomLevel >= 0.8 && pixelZoomLevel < 1.0 && (
-            <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-center z-30">
+          {/* Painting title overlay for steps 5/6 */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.8 && pixelZoomLevel <= 1.0 && (
+            <div className="absolute top-12 left-1/2 transform -translate-x-1/2 text-center z-30">
               <div className="text-sm font-normal text-white/60 tracking-normal">
                 A Sunday Afternoon on the Island of La Grande Jatte
               </div>
               <div className="text-xs text-gray-500 mt-0.5">
                 Georges Seurat, 1886
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                Seurat painted this masterpiece by placing thousands of individual dots of pure color
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                Each dot blends optically in the viewer's eye to create the final image
               </div>
             </div>
           )}
@@ -1760,7 +1766,7 @@ function App() {
           
           {/* Zoom progress indicator (6 steps including image load) */}
           {narrativeIndex === 1 && pixelZoomLevel > 0 && pixelZoomLevel <= 1.0 && (
-            <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 flex space-x-1">
+            <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 flex space-x-1">
               {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map((threshold, index) => (
                 <div
                   key={index}
