@@ -36,11 +36,11 @@ function App() {
   const narrativeStates = [
     {
       title: "What is an Image?",
-      text: "Is it something we create, or something we discover in a space of infinite potential?",
+      text: "Is it something we create, or something we discover ?",
       state: 'quantum'
     },
     {
-      title: "The Building Blocks",
+      title: "If We Look Closer, What Do We Find?",
       text: "Pixels are tiny tiles forming a mosaic. Each pixel is defined by numbers representing color and position.",
       state: 'pixels'
     },
@@ -56,7 +56,7 @@ function App() {
     },
     {
       title: "Beyond Comprehension",
-      text: "More combinations than atoms in the universe. Yet finite. Every photograph that could ever be taken already exists as coordinates.",
+      text: "More combinations than atoms in the universe. Yet finite. The photo you took this morning and the one your grandchild will take in 50 years both already exist as coordinates.",
       state: 'infinite'
     },
     {
@@ -75,7 +75,7 @@ function App() {
       state: 'time'
     },
     {
-      title: "The Latent Compass",
+      title: "The Latent Space",
       text: "Now, we have a new kind of compass. Artificial Intelligence learns the topography of this space, translating human intent into precise coordinates.",
       state: 'navigation'
     },
@@ -85,8 +85,8 @@ function App() {
       state: 'sublime'
     },
     {
-      title: "The Expansed Canvas",
-      text: "This interface allows human language to act as the query language for the universe of all possible images 2) unlocking exploration across a previously unmappable visual expanse.",
+      title: "The Expanded Canvas",
+      text: "This interface allows human language to act as the query language for the universe of all possible images 2) unlocking exploration across a previously uncharted visual expanse.",
       state: 'sublime'
     }
   ]
@@ -372,7 +372,7 @@ function App() {
   useEffect(() => {
     if (narrativeIndex !== 1 || !narrativeRef.current) return
     
-    const paintingTitle = 'A Sunday Afternoon on the Island of La Grande Jatte by Georges Seurat, 1886'
+    // const paintingTitle = 'A Sunday Afternoon on the Island of La Grande Jatte by Georges Seurat, 1886'
     const paintingParagraph = 'Long before computers, artists were manually navigating the space of all possible images. Each of Seurat’s dots functioned like an early pixel, long before screens existed.'
     const titleClass = "text-2xl md:text-3xl"
 
@@ -684,39 +684,16 @@ function App() {
 
     const sceneInitializers: { [key: string]: () => any[] | Promise<any[]> } = {
       'quantum': () => {
-        const count = 30000
-        const geometry = new window.THREE.BufferGeometry()
-        const positions = new Float32Array(count * 3)
-        
-        // Create human-like figure from particles
-        const headRadius = 2.5
-        for (let i = 0; i < count * 0.7; i++) {
-          const i3 = i * 3
-          const phi = Math.acos(-1 + (2 * i) / (count * 0.7))
-          const theta = Math.sqrt((count * 0.7) * Math.PI) * phi
-          positions[i3] = headRadius * Math.cos(theta) * Math.sin(phi)
-          positions[i3+1] = headRadius * Math.sin(theta) * Math.sin(phi) + 1.0
-          positions[i3+2] = headRadius * Math.cos(phi)
-        }
-
-        // Body/shoulders
-        for (let i = Math.floor(count * 0.7); i < count; i++) {
-          const i3 = i * 3
-          positions[i3] = (Math.random() - 0.5) * 6
-          positions[i3+1] = (Math.random() - 0.5) * 3 - 2.5
-          positions[i3+2] = (Math.random() - 0.5) * 4
-        }
-
-        geometry.setAttribute('position', new window.THREE.BufferAttribute(positions, 3))
-        const material = new window.THREE.PointsMaterial({ 
-          color: 0xddddff, 
-          size: 0.03, 
-          transparent: true, 
-          opacity: 0.7, 
-          blending: window.THREE.AdditiveBlending 
+        // First phase - keep it simple and empty for now
+        // Just a subtle ambient presence
+        const geometry = new window.THREE.SphereGeometry(0.1, 8, 8)
+        const material = new window.THREE.MeshBasicMaterial({
+          color: 0x444444,
+          transparent: true,
+          opacity: 0.3
         })
-        const points = new window.THREE.Points(geometry, material)
-        return [points]
+        const sphere = new window.THREE.Mesh(geometry, material)
+        return [sphere]
       },
 
       'pixels': async () => {
@@ -1005,27 +982,110 @@ function App() {
       },
 
       'navigation': () => {
-        const geometry = new window.THREE.BufferGeometry()
-        const count = 50000
-        const positions = new Float32Array(count * 3)
-        
-        for (let i = 0; i < count; i++) {
+        // Neural Network Particle System - Moved to Latent Compass phase
+        const neuronCount = 350 // More particles for richer visualization
+        const maxConnections = 6 // Slightly fewer connections per neuron for performance
+
+        // Create neurons (particles)
+        const neuronGeometry = new window.THREE.BufferGeometry()
+        const neuronPositions = new Float32Array(neuronCount * 3)
+        const neuronColors = new Float32Array(neuronCount * 3)
+
+        // Create connection lines
+        const connectionGeometry = new window.THREE.BufferGeometry()
+        const maxConnectionLines = neuronCount * maxConnections
+        const connectionPositions = new Float32Array(maxConnectionLines * 6) // 2 points per line * 3 coords
+        const connectionColors = new Float32Array(maxConnectionLines * 6)
+
+        // Initialize neurons in a 3D brain-like structure
+        for (let i = 0; i < neuronCount; i++) {
           const i3 = i * 3
-          const angle = (i / count) * Math.PI * 2 * 10
-          const radius = i / count * 20
-          positions[i3] = Math.cos(angle) * radius
-          positions[i3+1] = Math.sin(angle) * radius
-          positions[i3+2] = (i / count - 0.5) * 20
+
+          // Create brain-like distribution (more dense in center, thinning at edges)
+          const radius = Math.pow(Math.random(), 0.7) * 4 // Bias toward center
+          const theta = Math.random() * Math.PI * 2
+          const phi = Math.acos(2 * Math.random() - 1)
+
+          neuronPositions[i3] = radius * Math.sin(phi) * Math.cos(theta)
+          neuronPositions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta) + Math.random() * 2 - 1
+          neuronPositions[i3 + 2] = radius * Math.cos(phi)
+
+          // Color neurons based on "activation level" (brighter blue-cyan gradient)
+          const activation = Math.random()
+          neuronColors[i3] = 0.1 + activation * 0.4     // R: dark blue to bright cyan
+          neuronColors[i3 + 1] = 0.3 + activation * 0.7 // G: blue to bright cyan
+          neuronColors[i3 + 2] = 0.8 + activation * 0.2 // B: bright blue to white
         }
 
-        geometry.setAttribute('position', new window.THREE.BufferAttribute(positions, 3))
-        const material = new window.THREE.PointsMaterial({ 
-          color: 0xaaaaff, 
-          size: 0.05, 
-          transparent: true, 
-          opacity: 0.6 
+        neuronGeometry.setAttribute('position', new window.THREE.BufferAttribute(neuronPositions, 3))
+        neuronGeometry.setAttribute('color', new window.THREE.BufferAttribute(neuronColors, 3))
+
+        const neuronMaterial = new window.THREE.PointsMaterial({
+          size: 0.12,
+          vertexColors: true,
+          transparent: true,
+          opacity: 1.0,
+          blending: window.THREE.AdditiveBlending
         })
-        return [new window.THREE.Points(geometry, material)]
+
+        const neurons = new window.THREE.Points(neuronGeometry, neuronMaterial)
+
+        // Create connection lines geometry
+        connectionGeometry.setAttribute('position', new window.THREE.BufferAttribute(connectionPositions, 3))
+        connectionGeometry.setAttribute('color', new window.THREE.BufferAttribute(connectionColors, 3))
+
+        const connectionMaterial = new window.THREE.LineBasicMaterial({
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.8,
+          blending: window.THREE.AdditiveBlending,
+          linewidth: 2
+        })
+
+        const connections = new window.THREE.LineSegments(connectionGeometry, connectionMaterial)
+
+        // Store neural network state
+        neurons.userData = {
+          neuronPositions,
+          neuronColors,
+          connections: [] as Array<{from: number, to: number, strength: number, firing: boolean}>,
+          firingQueue: [] as Array<{neuron: number, timestamp: number}>,
+          lastUpdate: 0,
+          signalSpeed: 0.02,
+          baseConnectionDistance: 3.2
+        }
+
+        // Initialize random connections between nearby neurons
+        const initConnections = () => {
+          const connections = []
+          for (let i = 0; i < neuronCount; i++) {
+            const connectionsForThisNeuron = Math.floor(Math.random() * maxConnections) + 1
+
+            for (let c = 0; c < connectionsForThisNeuron; c++) {
+              // Find a nearby neuron to connect to
+              let targetNeuron = i
+              let attempts = 0
+              while (targetNeuron === i && attempts < 10) {
+                targetNeuron = Math.floor(Math.random() * neuronCount)
+                attempts++
+              }
+
+              if (targetNeuron !== i) {
+                connections.push({
+                  from: i,
+                  to: targetNeuron,
+                  strength: Math.random() * 0.8 + 0.2,
+                  firing: false
+                })
+              }
+            }
+          }
+          return connections
+        }
+
+        neurons.userData.connections = initConnections()
+
+        return [neurons, connections]
       },
 
       'sublime': () => {
@@ -1318,8 +1378,15 @@ function App() {
       // Simple animations
       switch(animationState) {
         case 'quantum':
+          // First phase - simple subtle animation
           if (objects[0]) {
-            objects[0].rotation.y += 0.0005
+            const sphere = objects[0]
+            const time = Date.now() * 0.001
+            // Subtle breathing effect
+            const scale = 1 + Math.sin(time * 1.5) * 0.05
+            sphere.scale.setScalar(scale)
+            // Gentle rotation
+            sphere.rotation.y += 0.001
           }
           break
         case 'pixels':
@@ -1343,7 +1410,7 @@ function App() {
               const key = `${x}_${y}_${currentTime}`
 
               let content = ''
-              let fontSizeToUse = '20px'
+              // let fontSizeToUse = '20px'
 
               if (type === 'number') {
                 content = chars[Math.floor(Math.random() * chars.length)]
@@ -1352,10 +1419,10 @@ function App() {
                 content = symbols[Math.floor(Math.random() * symbols.length)]
               } else if (type === 'mini_coord') {
                 content = `(${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)},${Math.floor(Math.random() * 256)})`
-                fontSizeToUse = '14px'
+                // fontSizeToUse = '14px'
               } else if (type === 'hex_value') {
                 content = Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()
-                fontSizeToUse = '16px'
+                // fontSizeToUse = '16px'
               }
 
               coordinateFadeStates[key] = {
@@ -1531,13 +1598,14 @@ function App() {
 
                 // Draw glow effect (multiple rectangles with decreasing opacity)
                 coordinatesCtx.save()
+                const tileColor = selectedInfo.colorTileRGB || '#ffffff'
                 for (let i = 5; i >= 0; i--) {
-                  coordinatesCtx.fillStyle = selectedInfo.colorTileRGB.replace('rgb', 'rgba').replace(')', `, ${0.1 - i * 0.015})`)
+                  coordinatesCtx.fillStyle = tileColor.replace('rgb', 'rgba').replace(')', `, ${0.1 - i * 0.015})`)
                   coordinatesCtx.fillRect(tileX - i * 2, tileY - i * 2, tileSize + i * 4, tileSize + i * 4)
                 }
 
                 // Draw main color tile
-                coordinatesCtx.fillStyle = selectedInfo.colorTileRGB
+                coordinatesCtx.fillStyle = tileColor
                 coordinatesCtx.fillRect(tileX, tileY, tileSize, tileSize)
 
                 // Draw border
@@ -1590,8 +1658,143 @@ function App() {
           }
           break
         case 'navigation':
-          if (objects[0]) {
-            objects[0].rotation.z += 0.005
+          // Neural Network animation - moved from quantum phase
+          if (objects[0] && objects[1]) {
+            const neurons = objects[0]
+            const connections = objects[1]
+            const userData = neurons.userData
+            const time = Date.now() * 0.001
+            const neuronPositions = userData.neuronPositions
+            const neuronColors = userData.neuronColors
+
+            // Update neural activity every 100ms for performance
+            if (time - userData.lastUpdate > 0.1) {
+              userData.lastUpdate = time
+
+              // Randomly trigger neuron firings (increased frequency for more activity)
+              if (Math.random() > 0.7) { // 30% chance per update for more activity
+                const randomNeuron = Math.floor(Math.random() * (neuronPositions.length / 3))
+                userData.firingQueue.push({
+                  neuron: randomNeuron,
+                  timestamp: time
+                })
+              }
+
+              // Process firing queue
+              userData.firingQueue = userData.firingQueue.filter((fire: {neuron: number, timestamp: number}) => {
+                const elapsed = time - fire.timestamp
+
+                if (elapsed < 0.3) { // Signal lasts 300ms
+                  // Brighten firing neuron (white hot)
+                  const i3 = fire.neuron * 3
+                  neuronColors[i3] = 1.0     // Full red
+                  neuronColors[i3 + 1] = 1.0 // Full green
+                  neuronColors[i3 + 2] = 1.0 // Full blue (white)
+
+                  // Propagate to connected neurons
+                  userData.connections.forEach((conn: {from: number, to: number, strength: number, firing: boolean}) => {
+                    if (conn.from === fire.neuron) {
+                      const targetI3 = conn.to * 3
+                      const intensity = Math.max(0, 1 - elapsed / 0.3)
+                      neuronColors[targetI3] = Math.min(1.0, neuronColors[targetI3] + intensity * 0.5)
+                      neuronColors[targetI3 + 1] = Math.min(1.0, neuronColors[targetI3 + 1] + intensity * 0.3)
+                      neuronColors[targetI3 + 2] = Math.min(1.0, neuronColors[targetI3 + 2] + intensity * 0.2)
+                    }
+                  })
+
+                  return true // Keep in queue
+                } else {
+                  // Reset neuron color to resting state (brighter)
+                  const i3 = fire.neuron * 3
+                  const restingActivation = Math.random()
+                  neuronColors[i3] = 0.1 + restingActivation * 0.4
+                  neuronColors[i3 + 1] = 0.3 + restingActivation * 0.7
+                  neuronColors[i3 + 2] = 0.8 + restingActivation * 0.2
+                  return false // Remove from queue
+                }
+              })
+            }
+
+            // Update connection lines
+            const connectionPositions = connections.geometry.attributes.position.array
+            const connectionColors = connections.geometry.attributes.color.array
+            let connectionIndex = 0
+
+            userData.connections.forEach((conn: {from: number, to: number, strength: number, firing: boolean}) => {
+              const fromPos = [
+                neuronPositions[conn.from * 3],
+                neuronPositions[conn.from * 3 + 1],
+                neuronPositions[conn.from * 3 + 2]
+              ]
+              const toPos = [
+                neuronPositions[conn.to * 3],
+                neuronPositions[conn.to * 3 + 1],
+                neuronPositions[conn.to * 3 + 2]
+              ]
+
+              // Calculate distance for connection strength
+              const distance = Math.sqrt(
+                Math.pow(fromPos[0] - toPos[0], 2) +
+                Math.pow(fromPos[1] - toPos[1], 2) +
+                Math.pow(fromPos[2] - toPos[2], 2)
+              )
+
+              // Only show connections within range and with some probability
+              if (distance < userData.baseConnectionDistance && Math.random() > 0.4) {
+                // Set line positions (from -> to)
+                connectionPositions[connectionIndex] = fromPos[0]
+                connectionPositions[connectionIndex + 1] = fromPos[1]
+                connectionPositions[connectionIndex + 2] = fromPos[2]
+                connectionPositions[connectionIndex + 3] = toPos[0]
+                connectionPositions[connectionIndex + 4] = toPos[1]
+                connectionPositions[connectionIndex + 5] = toPos[2]
+
+                // Set line colors based on connection strength and activity
+                const baseOpacity = conn.strength * (1 - distance / userData.baseConnectionDistance)
+                const isActive = userData.firingQueue.some((f: {neuron: number, timestamp: number}) => f.neuron === conn.from || f.neuron === conn.to)
+
+                if (isActive) {
+                  // Bright active connection (electric cyan)
+                  connectionColors[connectionIndex] = 0.2
+                  connectionColors[connectionIndex + 1] = 1.0
+                  connectionColors[connectionIndex + 2] = 1.0
+                  connectionColors[connectionIndex + 3] = 0.2
+                  connectionColors[connectionIndex + 4] = 1.0
+                  connectionColors[connectionIndex + 5] = 1.0
+                } else {
+                  // More visible inactive connection (bright blue-white)
+                  const brightness = Math.max(0.3, baseOpacity * 1.2)
+                  connectionColors[connectionIndex] = 0.3 * brightness
+                  connectionColors[connectionIndex + 1] = 0.6 * brightness
+                  connectionColors[connectionIndex + 2] = 0.9 * brightness
+                  connectionColors[connectionIndex + 3] = 0.3 * brightness
+                  connectionColors[connectionIndex + 4] = 0.6 * brightness
+                  connectionColors[connectionIndex + 5] = 0.9 * brightness
+                }
+
+                connectionIndex += 6
+              }
+            })
+
+            // Clear remaining connection slots
+            for (let i = connectionIndex; i < connectionPositions.length; i++) {
+              connectionPositions[i] = 0
+              connectionColors[i] = 0
+            }
+
+            // More vibrant brain-like pulsing
+            const pulse = Math.sin(time * 2) * 0.15 + 0.9
+            neurons.material.opacity = 1.0 * pulse
+            connections.material.opacity = 0.8 * pulse
+
+            // Gentle rotation
+            neurons.rotation.y += 0.0002
+            connections.rotation.y += 0.0002
+
+            // Mark geometries for update
+            neurons.geometry.attributes.color.needsUpdate = true
+            connections.geometry.attributes.position.needsUpdate = true
+            connections.geometry.attributes.color.needsUpdate = true
           }
           break
       }
