@@ -382,7 +382,7 @@ function App() {
     if (pixelZoomLevel >= 0.2 && pixelZoomLevel < 0.4) {
       // Step 2/6: explain the first pixel with pure white text
       title = ''
-      text = 'As you can see in the first pixel we enter 119 of red, 136 of green, and 85 of blue, and we tell it that it\'s on the top left corner 0,0.'
+      text = 'in the first pixel for example, we enter 119 of red, 136 of green, and 85 of blue, and we tell it that it\'s on the top left corner 0,0.'
     } else if (pixelZoomLevel >= 0.4 && pixelZoomLevel < 0.6) {
       // Step 3/6: add transition text
       title = ''
@@ -1196,15 +1196,17 @@ function App() {
               textCtx.strokeText(line, centerX, yPos)
               textCtx.fillText(line, centerX, yPos)
             })
-          } else {
-            // For other zoom levels, show RGB and position
-            const rgbText = `${r},${g},${b}`
-            const posText = `[${x},${y}]`
-            
-            textCtx.strokeText(rgbText, centerX, centerY - fontSize * 0.3)
-            textCtx.fillText(rgbText, centerX, centerY - fontSize * 0.3)
-            textCtx.strokeText(posText, centerX, centerY + fontSize * 0.3)
-            textCtx.fillText(posText, centerX, centerY + fontSize * 0.3)
+                    } else {
+            // For other zoom levels, show RGB and position (skip last row)
+            if (y < pixelCountY - 1) {
+              const rgbText = `${r},${g},${b}`
+              const posText = `[${x},${y}]`
+
+              textCtx.strokeText(rgbText, centerX, centerY - fontSize * 0.4)
+              textCtx.fillText(rgbText, centerX, centerY - fontSize * 0.4)
+              textCtx.strokeText(posText, centerX, centerY + fontSize * 0.4)
+              textCtx.fillText(posText, centerX, centerY + fontSize * 0.4)
+            }
           }
         }
       }
