@@ -40,13 +40,13 @@ function App() {
       state: 'quantum'
     },
     {
-      title: "If We Look Closer, What Do We Find?",
+      title: "Looking Closer",
       text: "Pixels are tiny tiles forming a mosaic. Each pixel is defined by numbers representing color and position.",
       state: 'pixels'
     },
     {
       title: "Mathematical Certainty",
-      text: "Every possible combination of these numbers maps to exactly one unique image. Every image has a unique coordinate.",
+      text: "Ultimately, an image is just a grid of numbers. Each number tells a single pixel what color it should be. Every unique grid of numbers describes exactly one unique image.",
       state: 'coordinates'
     },
     {
@@ -943,23 +943,72 @@ function App() {
 
       'noise': () => {
         const geometry = new window.THREE.BufferGeometry()
-        const count = 100000
-        const boxSize = 12
+        const count = 120000 // Less dense - reduced particle count
         const positions = new Float32Array(count * 3)
-        
+        const colors = new Float32Array(count * 3)
+
+        // Screen dimensions with abrupt edges
+        const screenWidth = 8
+        const screenHeight = 4.5
+        const screenDepth = 0.8
+        const edgeBuffer = 0.1 // Small buffer to avoid clipping artifacts
+
         for (let i = 0; i < count; i++) {
           const i3 = i * 3
-          positions[i3] = (Math.random() - 0.5) * boxSize
-          positions[i3+1] = (Math.random() - 0.5) * boxSize
-          positions[i3+2] = (Math.random() - 0.5) * boxSize
+
+          // Create abrupt screen edges by distributing particles within strict boundaries
+          // Use uniform distribution within screen bounds for sharp edges
+          positions[i3] = (Math.random() - 0.5) * (screenWidth - edgeBuffer)
+          positions[i3+1] = (Math.random() - 0.5) * (screenHeight - edgeBuffer)
+
+          // Keep depth shallow but with slight variation for depth
+          positions[i3+2] = (Math.random() - 0.5) * screenDepth
+
+          // Enhanced colors for better glow
+          const brightness = Math.random()
+          if (Math.random() > 0.8) { // 20% bright particles
+            const bright = brightness * 0.9 + 0.3 // Brighter for better glow
+            colors[i3] = bright
+            colors[i3+1] = bright
+            colors[i3+2] = bright
+          } else if (Math.random() > 0.6) { // 20% gray particles
+            const gray = brightness * 0.6 + 0.25 // Slightly brighter
+            colors[i3] = gray
+            colors[i3+1] = gray
+            colors[i3+2] = gray
+          } else { // 60% dark particles
+            const dark = brightness * 0.25 + 0.1 // Slightly more visible for glow
+            colors[i3] = dark
+            colors[i3+1] = dark
+            colors[i3+2] = dark
+          }
         }
-        
+
         geometry.setAttribute('position', new window.THREE.BufferAttribute(positions, 3))
-        const material = new window.THREE.PointsMaterial({ 
-          color: 0x888888, 
-          size: 0.03 
+        geometry.setAttribute('color', new window.THREE.BufferAttribute(colors, 3))
+
+        const material = new window.THREE.PointsMaterial({
+          size: 0.035, // Slightly larger for better glow
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.9, // Higher opacity for more glow
+          blending: window.THREE.AdditiveBlending
         })
-        return [new window.THREE.Points(geometry, material)]
+
+        const points = new window.THREE.Points(geometry, material)
+
+        // Store data for more alive animation
+        points.userData = {
+          positions,
+          colors,
+          originalColors: colors.slice(),
+          lastUpdate: 0,
+          flickerSpeed: 0.035, // Slightly faster for more life
+          movementOffset: 0,
+          wavePhase: Math.random() * Math.PI * 2 // Random starting phase for wave effect
+        }
+
+        return [points]
       },
 
       'time': () => {
@@ -1795,6 +1844,59 @@ function App() {
             neurons.geometry.attributes.color.needsUpdate = true
             connections.geometry.attributes.position.needsUpdate = true
             connections.geometry.attributes.color.needsUpdate = true
+          }
+          break
+        case 'noise':
+          if (objects[0]) {
+            const points = objects[0]
+            const userData = points.userData
+            const time = Date.now() * 0.001
+
+            // More alive static flickering animation
+            if (time - userData.lastUpdate > userData.flickerSpeed) {
+              userData.lastUpdate = time
+
+              const colors = userData.colors
+              const originalColors = userData.originalColors
+              const positions = userData.positions
+
+              // Update movement offset for subtle wave effect
+              userData.movementOffset += 0.01
+
+              // More dynamic flickering with subtle wave patterns
+              for (let i = 0; i < colors.length; i += 3) {
+                const particleIndex = i / 3
+                const x = positions[i]
+                const y = positions[i + 1]
+
+                // Create subtle wave patterns across the static
+                const waveX = Math.sin(x * 0.5 + userData.movementOffset + userData.wavePhase) * 0.1
+                const waveY = Math.cos(y * 0.3 + userData.movementOffset * 0.7) * 0.1
+                const waveEffect = (waveX + waveY) * 0.5
+
+                // More alive brightness variation
+                const baseBrightness = originalColors[i]
+                const randomVariation = (Math.random() - 0.5) * 0.4 // ±0.2 variation
+                const waveVariation = waveEffect * 0.2
+                const totalVariation = randomVariation + waveVariation
+
+                colors[i] = Math.max(0, Math.min(1.0, baseBrightness + totalVariation))
+                colors[i+1] = Math.max(0, Math.min(1.0, originalColors[i+1] + totalVariation))
+                colors[i+2] = Math.max(0, Math.min(1.0, originalColors[i+2] + totalVariation))
+              }
+
+              // Mark colors for update
+              points.geometry.attributes.color.needsUpdate = true
+            }
+
+            // Minimal subtle rotation with slight variation
+            points.rotation.y += 0.00015
+            points.rotation.x += 0.00008
+
+            // More alive opacity variation with subtle pulsing
+            const pulse = Math.sin(time * 2) * 0.08 + 0.85
+            const secondaryPulse = Math.sin(time * 3.7) * 0.03 // Add secondary wave
+            points.material.opacity = Math.max(0.7, pulse + secondaryPulse)
           }
           break
       }
