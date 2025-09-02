@@ -168,8 +168,8 @@ function App() {
         return
       }
 
-      // Image zoom controls for pixels phase (start from 4/5 step)
-      if (narrativeIndex === 1 && pixelZoomLevel >= 0.6) {
+      // Image zoom controls for pixels phase (start from 4/5 step, disabled on last slide 6/6)
+      if (narrativeIndex === 1 && pixelZoomLevel >= 0.6 && pixelZoomLevel < 1.0) {
         if (e.key === '+' || e.key === '=') {
           e.preventDefault()
           const maxZoom = pixelZoomLevel >= 0.8 ? 64.0 : 32.0
@@ -380,16 +380,20 @@ function App() {
     let text = narrativeStates[1].text
 
     if (pixelZoomLevel >= 0.2 && pixelZoomLevel < 0.4) {
-      // Step 2/6: explain the numbers shown (RGB and position)
-      title = narrativeStates[1].title
-      text = 'Those numbers are RGB values — 119 red, 136 green, 85 blue. They tell how much of each color the pixel has (0 = none, 255 = full). The [0,0] position is the origin of the image grid (top-left corner).'
+      // Step 2/6: explain the first pixel with pure white text
+      title = ''
+      text = 'As you can see in the first pixel we enter 119 of red, 136 of green, and 85 of blue, and we tell it that it\'s on the top left corner 0,0.'
+    } else if (pixelZoomLevel >= 0.4 && pixelZoomLevel < 0.6) {
+      // Step 3/6: add transition text
+      title = ''
+      text = 'Now let\'s move back a little...'
     } else if (pixelZoomLevel >= 0.8 && pixelZoomLevel < 1.0) {
       // Step 5/6: show only the painting title
       title = paintingTitle
       text = ''
     } else if (pixelZoomLevel >= 1.0) {
-      // Step 6/6: show painting title + paragraph details
-      title = paintingTitle
+      // Step 6/6: show only paragraph details (remove title)
+      title = ''
       text = paintingParagraph
     }
 
@@ -1465,8 +1469,8 @@ function App() {
             </div>
           )}
           
-          {/* Image zoom controls start from 4/5 step */}
-          {narrativeIndex === 1 && pixelZoomLevel >= 0.6 && (
+          {/* Image zoom controls start from 4/5 step, but disabled on last slide (6/6) */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.6 && pixelZoomLevel < 1.0 && (
             <div className="absolute top-8 right-8 pointer-events-auto">
               <div className="bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
                 <div className="text-xs text-gray-400 mb-3">Image Zoom Controls</div>
