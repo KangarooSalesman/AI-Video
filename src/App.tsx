@@ -387,9 +387,9 @@ function App() {
       // Step 3/6: add transition text
       title = ''
       text = 'Now let\'s move back a little...'
-    } else if (pixelZoomLevel >= 0.8 && pixelZoomLevel < 1.0) {
-      // Step 5/6: show only the painting title
-      title = paintingTitle
+    } else     if (pixelZoomLevel >= 0.8 && pixelZoomLevel < 1.0) {
+      // Step 5/6: show painting title at top (not in bottom narrative)
+      title = ''
       text = ''
     } else if (pixelZoomLevel >= 1.0) {
       // Step 6/6: show only paragraph details (remove title)
@@ -837,11 +837,13 @@ function App() {
                 
                 // Sample the texture at the pixel center
                 color = texture2D(uTexture, pixelUV);
-                
-                // Add subtle grid lines to show pixel boundaries
-                vec2 grid = abs(fract(zoomedUV * pixelCount) - 0.5);
-                float gridStrength = smoothstep(0.45, 0.5, max(grid.x, grid.y));
-                color.rgb = mix(color.rgb, vec3(0.2), gridStrength * 0.3);
+
+                // Add subtle grid lines to show pixel boundaries (only for pixelated steps, not full resolution)
+                if (uZoom < 1.0) {
+                  vec2 grid = abs(fract(zoomedUV * pixelCount) - 0.5);
+                  float gridStrength = smoothstep(0.45, 0.5, max(grid.x, grid.y));
+                  color.rgb = mix(color.rgb, vec3(0.2), gridStrength * 0.3);
+                }
               }
               
               // Overlay text for RGB values when appropriate (only steps 1-2)
@@ -1681,13 +1683,25 @@ function App() {
           <h1 className="text-2xl font-bold text-white tracking-wider">TOTAL PIXEL SPACE</h1>
           <div className="mt-4 text-xs text-gray-500 pointer-events-auto">
             <div>Index: {narrativeIndex} | Interacted: {hasInteracted.toString()}</div>
-            <button 
+            <button
               onClick={resetExperience}
               className="mt-2 px-3 py-1 bg-gray-800 text-white rounded text-xs hover:bg-gray-700"
             >
               Reset (R)
             </button>
           </div>
+
+          {/* Painting title overlay for step 5/6 */}
+          {narrativeIndex === 1 && pixelZoomLevel >= 0.8 && pixelZoomLevel < 1.0 && (
+            <div className="absolute top-20 left-1/2 transform -translate-x-1/2 text-center z-30">
+              <div className="text-sm font-normal text-white/60 tracking-normal">
+                A Sunday Afternoon on the Island of La Grande Jatte
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                Georges Seurat, 1886
+              </div>
+            </div>
+          )}
         </header>
         
         <footer className="text-center">
