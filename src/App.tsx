@@ -56,7 +56,7 @@ function App() {
     },
     {
       title: "Beyond Comprehension",
-      text: "More combinations than atoms in the universe. Yet finite. The photo you took this morning and the one your grandchild will take in 50 years both already exist as coordinates.",
+      text: "More combinations than atoms in the universe. Yet finite. The photo someone took this morning and the one his grandchild will take in 50 years both already exist as coordinates.",
       state: 'infinite'
     },
     {
@@ -697,10 +697,10 @@ function App() {
       },
 
       'pixels': async () => {
-        // Create a plane with correct aspect ratio for the image
-        const aspectRatio = 1622 / 1080 // 1.5
+        // Create a plane with screen aspect ratio to match the canvas dimensions used for text overlays
+        const screenAspectRatio = window.innerWidth / window.innerHeight
         const height = 10
-        const width = height * aspectRatio // 15
+        const width = height * screenAspectRatio
         const geometry = new window.THREE.PlaneGeometry(width, height)
         
         // Create image texture from our sample data
@@ -848,10 +848,10 @@ function App() {
       },
 
       'coordinates': () => {
-        // Use same dimensions as the previous image (Seurat painting)
-        const aspectRatio = 1622 / 1080 // Same as pixels phase
+        // Use screen aspect ratio to match the coordinates canvas dimensions
+        const screenAspectRatio = window.innerWidth / window.innerHeight
         const height = 10 // Same height as pixels phase
-        const width = height * aspectRatio // Same width as pixels phase
+        const width = height * screenAspectRatio // Match screen aspect ratio
         const geometry = new window.THREE.PlaneGeometry(width, height)
         const material = new window.THREE.MeshBasicMaterial({
           map: coordinatesTexture,
@@ -1185,9 +1185,9 @@ function App() {
       const canvasHeight = textCtx.canvas.height
       
       // Calculate the size and position of the image plane on screen
-      const aspectRatio = 1622 / 1080
+      const screenAspectRatio = window.innerWidth / window.innerHeight
       const planeHeight = 10
-      const planeWidth = planeHeight * aspectRatio
+      const planeWidth = planeHeight * screenAspectRatio
       
       // Estimate screen projection (approximate)
       const fov = 75 * Math.PI / 180
