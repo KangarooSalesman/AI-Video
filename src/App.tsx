@@ -402,7 +402,11 @@ function App() {
       // Step 3/6: add transition text
       title = ''
       text = 'Now let\'s move back a little...'
-    } else     if (pixelZoomLevel >= 0.8 && pixelZoomLevel < 1.0) {
+    } else if (pixelZoomLevel >= 0.6 && pixelZoomLevel < 0.8) {
+      // Step 4/6: hide title and text during pixel grid view
+      title = ''
+      text = ''
+    } else if (pixelZoomLevel >= 0.8 && pixelZoomLevel < 1.0) {
       // Step 5/6: show painting title at top (not in bottom narrative)
       title = ''
       text = ''

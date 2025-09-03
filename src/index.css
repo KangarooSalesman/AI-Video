@@ -23,13 +23,11 @@
 
   .visible {
     opacity: 1 !important;
-    transform: translateY(0) !important;
   }
   
   .narrative-text {
     opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 1.5s ease, transform 1.5s ease;
+    transition: opacity 1.5s ease;
   }
 
   @keyframes blur-to-text {
