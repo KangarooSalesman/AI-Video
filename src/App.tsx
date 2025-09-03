@@ -41,7 +41,7 @@ function App() {
     },
     {
       title: "Looking Closer",
-      text: "Pixels are tiny tiles forming a mosaic. Each pixel is defined by numbers representing color and position.",
+      text: "Pixels are tiny tiles forming a mosaic. A sequence of numbers tells each pixel its exact color and place in the image",
       state: 'pixels'
     },
     {
@@ -61,7 +61,7 @@ function App() {
     },
     {
       title: "The Universal Archive",
-      text: "Every frame of every possible film. Every face that could ever be seen. All waiting in a vast mathematical space to be discovered.",
+      text: "Every possible picture. Every landscape, every person real or imagined. All are just coordinates in an infinite digital canvas, waiting to be discovered",
       state: 'library'
     },
     {
@@ -86,7 +86,7 @@ function App() {
     },
     {
       title: "Guided by Imagination",
-      text: "We don't just wander. The AI acts as our guide, charting a course through the noise to the images we imagine.",
+      text: "The AI acts like a powerful magnet. It pulls the correct pixels—like iron filings—out of a chaotic pile of sand, arranging them into the precise shape of the images we imagine",
       state: 'sublime'
     },
     {
