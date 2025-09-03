@@ -50,7 +50,7 @@ function App() {
       state: 'coordinates'
     },
     {
-      title: "How Many Images Exist ",
+      title: "How Many Images Exist ?",
       text: "With over 16.7 million colors per pixel and a million pixels per image, the total number of images that exists, has over 7.5 million digits.",
       state: 'scale'
     },
@@ -66,7 +66,7 @@ function App() {
     },
     {
       title: "Signal in the Noise",
-      text: "Most of this space is visual static. Searching for a coherent image here is like trying to find a needle in a haystack of pure visual chaos",
+      text: "Although most of this space is visual static. Searching for a coherent image here is like trying to find a needle in a haystack of pure visual chaos",
       state: 'noise'
     },
     {
@@ -86,7 +86,7 @@ function App() {
     },
     {
       title: "Guided by Imagination",
-      text: "The AI acts like a powerful magnet. It pulls the correct pixels—like iron filings—out of a chaotic pile of sand, arranging them into the precise shape of the images we imagine",
+      text: "The AI acts like a powerful magnet. It pulls the correct pixels — like iron filings — out of a chaotic pile of sand, arranging them into the shape of the images we imagine",
       state: 'sublime'
     },
     {
@@ -119,9 +119,19 @@ function App() {
         let content = ''
         if (currentState.title) {
           const titleClass = newIndex === 0 ? "text-3xl md:text-4xl" : "text-2xl md:text-3xl"
-          content += `<h2 class="${titleClass} font-bold text-white mb-3">${currentState.title}</h2>`
+          // Add black background for Mathematical Certainty phase
+          if (currentState.state === 'coordinates') {
+            content += `<h2 class="${titleClass} font-bold text-white mb-3" style="background-color: rgba(0, 0, 0, 0.99); padding: 0.5rem 1rem; border-radius: 0.5rem; display: inline-block;">${currentState.title}</h2>`
+          } else {
+            content += `<h2 class="${titleClass} font-bold text-white mb-3">${currentState.title}</h2>`
+          }
         }
-        content += `<p class="text-lg md:text-xl text-gray-300">${currentState.text}</p>`
+        // Add black background for text in Mathematical Certainty phase
+        if (currentState.state === 'coordinates') {
+          content += `<p class="text-lg md:text-xl text-gray-300" style="background-color: rgba(0, 0, 0, 0.7); padding: 0.5rem 1rem; border-radius: 0.5rem; display: inline-block;">${currentState.text}</p>`
+        } else {
+          content += `<p class="text-lg md:text-xl text-gray-300">${currentState.text}</p>`
+        }
         
         if (narrativeRef.current) {
           narrativeRef.current.innerHTML = content
@@ -1733,6 +1743,25 @@ function App() {
             }
 
             if(coordinatesTexture) coordinatesTexture.needsUpdate = true
+          }
+          break
+        case 'infinite':
+          if (objects[0]) {
+            objects[0].rotation.y += 0.0002
+            objects[0].rotation.x += 0.0001
+
+            // Slow camera drifting backwards
+            const time = Date.now() * 0.001
+            const driftSpeed = 0.001
+            const maxDriftDistance = 15
+            const baseCameraZ = 10
+
+            // Create a slow oscillating drift backwards
+            const driftOffset = Math.sin(time * 0.3) * maxDriftDistance
+            const targetZ = baseCameraZ + driftOffset
+
+            // Smooth interpolation towards target position
+            camera.position.z += (targetZ - camera.position.z) * driftSpeed
           }
           break
         case 'library':
