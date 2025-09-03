@@ -66,7 +66,7 @@ function App() {
     },
     {
       title: "Signal in the Noise",
-      text: "Most of this space is visual static. Meaningful images are extremely rare in a vast sea of noise.",
+      text: "Most of this space is visual static. Searching for a coherent image here is like trying to find a needle in a haystack of pure visual chaos",
       state: 'noise'
     },
     {
@@ -946,12 +946,11 @@ function App() {
         return [new window.THREE.Points(geometry, material)]
       },
 
-      'noise': () => {
+            'noise': () => {
         // Create efficient TV static using a canvas texture instead of particles
         const staticCanvas = document.createElement('canvas')
-        const screenAspectRatio = window.innerWidth / window.innerHeight
         const canvasWidth = 512 // Reasonable resolution for performance
-        const canvasHeight = Math.floor(canvasWidth / screenAspectRatio)
+        const canvasHeight = 288 // 16:9 aspect ratio for TV screen
         
         staticCanvas.width = canvasWidth
         staticCanvas.height = canvasHeight
@@ -982,10 +981,10 @@ function App() {
         
         staticCtx.putImageData(imageData, 0, 0)
         
-        // Create Three.js plane with the static texture
-        const planeHeight = 10
-        const planeWidth = planeHeight * screenAspectRatio
-        const geometry = new window.THREE.PlaneGeometry(planeWidth, planeHeight)
+        // Create TV screen - 1.5x larger for better visibility
+        const tvWidth = 9 // 6 * 1.5 = 9 (larger width)
+        const tvHeight = 5.0625 // 3.375 * 1.5 = 5.0625 (16:9 aspect ratio)
+        const geometry = new window.THREE.PlaneGeometry(tvWidth, tvHeight)
         
         const staticTexture = new window.THREE.CanvasTexture(staticCanvas)
         staticTexture.magFilter = window.THREE.NearestFilter // Pixelated look
@@ -999,6 +998,32 @@ function App() {
         
         const staticPlane = new window.THREE.Mesh(geometry, material)
         
+        // Position the larger TV screen with more space around it
+        staticPlane.position.set(0, 0.3, -1)
+        
+        // Create ground plane for reflection
+        const groundGeometry = new window.THREE.PlaneGeometry(20, 20)
+        const groundMaterial = new window.THREE.MeshBasicMaterial({
+          color: 0x111111,
+          transparent: true,
+          opacity: 0.3
+        })
+        const ground = new window.THREE.Mesh(groundGeometry, groundMaterial)
+        ground.rotation.x = -Math.PI / 2 // Rotate to be horizontal
+        ground.position.y = -2.2 // Position below the TV
+        
+        // Create reflection of the TV static - match new TV dimensions
+        const reflectionGeometry = new window.THREE.PlaneGeometry(tvWidth, tvHeight)
+        const reflectionMaterial = new window.THREE.MeshBasicMaterial({
+          map: staticTexture,
+          transparent: true,
+          opacity: 0.15 // Much more subtle reflection
+        })
+        const reflection = new window.THREE.Mesh(reflectionGeometry, reflectionMaterial)
+        reflection.position.set(0, -1.8, -1) // Position further below for larger TV
+        reflection.rotation.x = Math.PI // Flip vertically for reflection effect
+        reflection.scale.y = 0.7 // Compress reflection vertically for perspective
+        
         // Store references for animation
         staticPlane.userData = {
           staticCanvas,
@@ -1009,10 +1034,11 @@ function App() {
           canvasWidth,
           canvasHeight,
           lastUpdate: 0,
-          updateInterval: 50 // Update every 50ms for smooth but efficient animation
+          updateInterval: 50, // Update every 50ms for smooth but efficient animation
+          reflection // Reference to reflection for synchronized updates
         }
         
-        return [staticPlane]
+        return [staticPlane, ground, reflection]
       },
 
       'time': () => {
@@ -1859,8 +1885,10 @@ function App() {
           // No animation - just text
           break
         case 'noise':
-          if (objects[0]) {
+          if (objects.length >= 3) {
             const staticPlane = objects[0]
+            const ground = objects[1]
+            const reflection = objects[2]
             const userData = staticPlane.userData
             const currentTime = Date.now()
 
@@ -1899,7 +1927,7 @@ function App() {
                 // Alpha remains 255
               }
 
-              // Update canvas and texture
+              // Update canvas and texture (this updates both main TV and reflection)
               staticCtx.putImageData(userData.imageData, 0, 0)
               staticTexture.needsUpdate = true
             }
@@ -1908,10 +1936,20 @@ function App() {
             const time = currentTime * 0.001
             const breathe = Math.sin(time * 1.2) * 0.02 + 0.85
             staticPlane.material.opacity = breathe
+            
+            // Reflection breathes in sync but much more subtle
+            reflection.material.opacity = (breathe - 0.7) * 0.15 // Scale down reflection opacity
 
             // Very subtle screen flicker by adjusting scale
             const flicker = 1 + Math.sin(time * 60) * 0.002
             staticPlane.scale.setScalar(flicker)
+            
+            // Reflection flickers slightly less for realism
+            reflection.scale.set(flicker * 0.98, flicker * 0.7, 1)
+
+            // Subtle ground opacity variation to simulate ambient light from TV
+            const groundGlow = Math.sin(time * 1.5) * 0.05 + 0.3
+            ground.material.opacity = groundGlow
           }
           break
       }
