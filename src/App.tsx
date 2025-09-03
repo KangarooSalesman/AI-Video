@@ -947,73 +947,72 @@ function App() {
       },
 
       'noise': () => {
-        const geometry = new window.THREE.BufferGeometry()
-        const count = 120000 // Less dense - reduced particle count
-        const positions = new Float32Array(count * 3)
-        const colors = new Float32Array(count * 3)
-
-        // Screen dimensions with abrupt edges
-        const screenWidth = 8
-        const screenHeight = 4.5
-        const screenDepth = 0.8
-        const edgeBuffer = 0.1 // Small buffer to avoid clipping artifacts
-
-        for (let i = 0; i < count; i++) {
-          const i3 = i * 3
-
-          // Create abrupt screen edges by distributing particles within strict boundaries
-          // Use uniform distribution within screen bounds for sharp edges
-          positions[i3] = (Math.random() - 0.5) * (screenWidth - edgeBuffer)
-          positions[i3+1] = (Math.random() - 0.5) * (screenHeight - edgeBuffer)
-
-          // Keep depth shallow but with slight variation for depth
-          positions[i3+2] = (Math.random() - 0.5) * screenDepth
-
-          // Enhanced colors for better glow
+        // Create efficient TV static using a canvas texture instead of particles
+        const staticCanvas = document.createElement('canvas')
+        const screenAspectRatio = window.innerWidth / window.innerHeight
+        const canvasWidth = 512 // Reasonable resolution for performance
+        const canvasHeight = Math.floor(canvasWidth / screenAspectRatio)
+        
+        staticCanvas.width = canvasWidth
+        staticCanvas.height = canvasHeight
+        const staticCtx = staticCanvas.getContext('2d')!
+        
+        // Generate initial static pattern
+        const imageData = staticCtx.createImageData(canvasWidth, canvasHeight)
+        const data = imageData.data
+        
+        for (let i = 0; i < data.length; i += 4) {
           const brightness = Math.random()
-          if (Math.random() > 0.8) { // 20% bright particles
-            const bright = brightness * 0.9 + 0.3 // Brighter for better glow
-            colors[i3] = bright
-            colors[i3+1] = bright
-            colors[i3+2] = bright
-          } else if (Math.random() > 0.6) { // 20% gray particles
-            const gray = brightness * 0.6 + 0.25 // Slightly brighter
-            colors[i3] = gray
-            colors[i3+1] = gray
-            colors[i3+2] = gray
-          } else { // 60% dark particles
-            const dark = brightness * 0.25 + 0.1 // Slightly more visible for glow
-            colors[i3] = dark
-            colors[i3+1] = dark
-            colors[i3+2] = dark
+          let value = 0
+          
+          // Create TV static distribution: mostly dark with bright spots
+          if (brightness > 0.85) {
+            value = 255 // Bright white pixels (15%)
+          } else if (brightness > 0.65) {
+            value = Math.floor(brightness * 180) // Gray pixels (20%)
+          } else {
+            value = Math.floor(brightness * 60) // Dark pixels (65%)
           }
+          
+          data[i] = value     // R
+          data[i + 1] = value // G
+          data[i + 2] = value // B
+          data[i + 3] = 255   // A
         }
-
-        geometry.setAttribute('position', new window.THREE.BufferAttribute(positions, 3))
-        geometry.setAttribute('color', new window.THREE.BufferAttribute(colors, 3))
-
-        const material = new window.THREE.PointsMaterial({
-          size: 0.035, // Slightly larger for better glow
-          vertexColors: true,
+        
+        staticCtx.putImageData(imageData, 0, 0)
+        
+        // Create Three.js plane with the static texture
+        const planeHeight = 10
+        const planeWidth = planeHeight * screenAspectRatio
+        const geometry = new window.THREE.PlaneGeometry(planeWidth, planeHeight)
+        
+        const staticTexture = new window.THREE.CanvasTexture(staticCanvas)
+        staticTexture.magFilter = window.THREE.NearestFilter // Pixelated look
+        staticTexture.minFilter = window.THREE.NearestFilter
+        
+        const material = new window.THREE.MeshBasicMaterial({
+          map: staticTexture,
           transparent: true,
-          opacity: 0.9, // Higher opacity for more glow
-          blending: window.THREE.AdditiveBlending
+          opacity: 0.85
         })
-
-        const points = new window.THREE.Points(geometry, material)
-
-        // Store data for more alive animation
-        points.userData = {
-          positions,
-          colors,
-          originalColors: colors.slice(),
+        
+        const staticPlane = new window.THREE.Mesh(geometry, material)
+        
+        // Store references for animation
+        staticPlane.userData = {
+          staticCanvas,
+          staticCtx,
+          staticTexture,
+          imageData,
+          data,
+          canvasWidth,
+          canvasHeight,
           lastUpdate: 0,
-          flickerSpeed: 0.035, // Slightly faster for more life
-          movementOffset: 0,
-          wavePhase: Math.random() * Math.PI * 2 // Random starting phase for wave effect
+          updateInterval: 50 // Update every 50ms for smooth but efficient animation
         }
-
-        return [points]
+        
+        return [staticPlane]
       },
 
       'time': () => {
@@ -1861,54 +1860,58 @@ function App() {
           break
         case 'noise':
           if (objects[0]) {
-            const points = objects[0]
-            const userData = points.userData
-            const time = Date.now() * 0.001
+            const staticPlane = objects[0]
+            const userData = staticPlane.userData
+            const currentTime = Date.now()
 
-            // More alive static flickering animation
-            if (time - userData.lastUpdate > userData.flickerSpeed) {
-              userData.lastUpdate = time
+            // Update static pattern at specified intervals for performance
+            if (currentTime - userData.lastUpdate > userData.updateInterval) {
+              userData.lastUpdate = currentTime
 
-              const colors = userData.colors
-              const originalColors = userData.originalColors
-              const positions = userData.positions
+              const { data, staticCtx, staticTexture } = userData
 
-              // Update movement offset for subtle wave effect
-              userData.movementOffset += 0.01
-
-              // More dynamic flickering with subtle wave patterns
-              for (let i = 0; i < colors.length; i += 3) {
-                const x = positions[i]
-                const y = positions[i + 1]
-
-                // Create subtle wave patterns across the static
-                const waveX = Math.sin(x * 0.5 + userData.movementOffset + userData.wavePhase) * 0.1
-                const waveY = Math.cos(y * 0.3 + userData.movementOffset * 0.7) * 0.1
-                const waveEffect = (waveX + waveY) * 0.5
-
-                // More alive brightness variation
-                const baseBrightness = originalColors[i]
-                const randomVariation = (Math.random() - 0.5) * 0.4 // ±0.2 variation
-                const waveVariation = waveEffect * 0.2
-                const totalVariation = randomVariation + waveVariation
-
-                colors[i] = Math.max(0, Math.min(1.0, baseBrightness + totalVariation))
-                colors[i+1] = Math.max(0, Math.min(1.0, originalColors[i+1] + totalVariation))
-                colors[i+2] = Math.max(0, Math.min(1.0, originalColors[i+2] + totalVariation))
+              // Regenerate static pattern efficiently
+              for (let i = 0; i < data.length; i += 4) {
+                const brightness = Math.random()
+                let value = 0
+                
+                // TV static distribution with slight temporal coherence for more realistic effect
+                const prevValue = data[i] / 255
+                const coherence = 0.15 // 15% chance to maintain similar brightness
+                
+                if (Math.random() < coherence) {
+                  // Maintain similar brightness with slight variation
+                  value = Math.max(0, Math.min(255, prevValue * 255 + (Math.random() - 0.5) * 60))
+                } else {
+                  // Generate new random value
+                  if (brightness > 0.85) {
+                    value = 255 // Bright white pixels (15%)
+                  } else if (brightness > 0.65) {
+                    value = Math.floor(brightness * 180) // Gray pixels (20%)
+                  } else {
+                    value = Math.floor(brightness * 60) // Dark pixels (65%)
+                  }
+                }
+                
+                data[i] = value     // R
+                data[i + 1] = value // G
+                data[i + 2] = value // B
+                // Alpha remains 255
               }
 
-              // Mark colors for update
-              points.geometry.attributes.color.needsUpdate = true
+              // Update canvas and texture
+              staticCtx.putImageData(userData.imageData, 0, 0)
+              staticTexture.needsUpdate = true
             }
 
-            // Minimal subtle rotation with slight variation
-            points.rotation.y += 0.00015
-            points.rotation.x += 0.00008
+            // Subtle breathing effect to simulate TV screen
+            const time = currentTime * 0.001
+            const breathe = Math.sin(time * 1.2) * 0.02 + 0.85
+            staticPlane.material.opacity = breathe
 
-            // More alive opacity variation with subtle pulsing
-            const pulse = Math.sin(time * 2) * 0.08 + 0.85
-            const secondaryPulse = Math.sin(time * 3.7) * 0.03 // Add secondary wave
-            points.material.opacity = Math.max(0.7, pulse + secondaryPulse)
+            // Very subtle screen flicker by adjusting scale
+            const flicker = 1 + Math.sin(time * 60) * 0.002
+            staticPlane.scale.setScalar(flicker)
           }
           break
       }
