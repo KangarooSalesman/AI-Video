@@ -50,7 +50,7 @@ function App() {
       state: 'coordinates'
     },
     {
-      title: "The Scale",
+      title: "How Many Images Exist ",
       text: "With over 16.7 million colors per pixel and a million pixels per image, the total number of images that exists, has over 7.5 million digits.",
       state: 'scale'
     },
@@ -66,7 +66,7 @@ function App() {
     },
     {
       title: "Signal in the Noise",
-      text: "Most of this space is visual static. Meaningful images are extremely rare in a vast sea of random noise.",
+      text: "Most of this space is visual static. Meaningful images are extremely rare in a vast sea of noise.",
       state: 'noise'
     },
     {
@@ -2127,3 +2127,4 @@ function App() {
 }
 
 export default App
+
