@@ -417,7 +417,12 @@ function App() {
       content += `<h2 class="${titleClass} font-bold text-white mb-3">${title}</h2>`
     }
     if (text) {
-      content += `<p class="text-lg md:text-xl text-gray-300">${text}</p>`
+      // Apply blur transition specifically for the painting paragraph
+      const isShowingPaintingParagraph = pixelZoomLevel >= 1.0 && text === paintingParagraph
+      const textClass = isShowingPaintingParagraph 
+        ? "text-lg md:text-xl text-gray-300 blur-transition"
+        : "text-lg md:text-xl text-gray-300"
+      content += `<p class="${textClass}">${text}</p>`
     }
 
     narrativeRef.current.innerHTML = content

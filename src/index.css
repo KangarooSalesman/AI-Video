@@ -31,4 +31,23 @@
     transform: translateY(20px);
     transition: opacity 1.5s ease, transform 1.5s ease;
   }
+
+  @keyframes blur-to-text {
+    0% {
+      filter: blur(20px);
+      opacity: 0;
+    }
+    50% {
+      filter: blur(10px);
+      opacity: 0.5;
+    }
+    100% {
+      filter: blur(0px);
+      opacity: 1;
+    }
+  }
+
+  .blur-transition {
+    animation: blur-to-text 1.5s ease-out forwards;
+  }
 }
