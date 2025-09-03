@@ -48,6 +48,6 @@
   }
 
   .blur-transition {
-    animation: blur-to-text 1.5s ease-out forwards;
+    animation: blur-to-text 0.8s ease-out forwards;
   }
 }

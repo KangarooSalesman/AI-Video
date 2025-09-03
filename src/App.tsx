@@ -2086,16 +2086,16 @@ function App() {
           {/* Painting title overlay for steps 5/6 */}
           {narrativeIndex === 1 && pixelZoomLevel >= 0.8 && pixelZoomLevel <= 1.0 && (
             <div className="absolute top-12 left-1/2 transform -translate-x-1/2 text-center z-30">
-              <div className="text-sm font-normal text-white/60 tracking-normal">
+              <div className="text-sm font-normal text-white/60 tracking-normal blur-transition">
                 A Sunday Afternoon on the Island of La Grande Jatte
               </div>
-              <div className="text-xs text-gray-500 mt-0.5">
+              <div className="text-xs text-gray-500 mt-0.5 blur-transition">
                 Georges Seurat, 1886
               </div>
-              <div className="text-xs text-gray-400 mt-1">
+              <div className="text-xs text-gray-400 mt-1 blur-transition">
                 Seurat painted this artwork by placing thousands of individual dots of pure color
               </div>
-              <div className="text-xs text-gray-400 mt-0.5">
+              <div className="text-xs text-gray-400 mt-0.5 blur-transition">
                 Each dot blends optically in the viewer's eye to create the final image
               </div>
             </div>
