@@ -463,6 +463,8 @@ function App() {
     const fontSize = 16
 
     let pixelGroup: any
+    let raycaster = new window.THREE.Raycaster()
+    let mouseVector = new window.THREE.Vector2()
 
     // Coordinate animation state
     let coordinateFadeStates: { [key: string]: { alpha: number, x: number, y: number, type: string, content?: string } } = {}
@@ -707,17 +709,200 @@ function App() {
     }
 
     const sceneInitializers: { [key: string]: () => any[] | Promise<any[]> } = {
-      'quantum': () => {
-        // First phase - keep it simple and empty for now
-        // Just a subtle ambient presence
-        const geometry = new window.THREE.SphereGeometry(0.1, 8, 8)
-        const material = new window.THREE.MeshBasicMaterial({
-          color: 0x444444,
-          transparent: true,
-          opacity: 0.3
+      'quantum': async () => {
+        // Load Mona Lisa image
+        const monaLisaData = await loadExternalImage('/mona_lisa.jpg')
+
+        // Create canvas and texture for Mona Lisa
+        const monaLisaCanvas = document.createElement('canvas')
+        monaLisaCanvas.width = monaLisaData.width
+        monaLisaCanvas.height = monaLisaData.height
+        const monaLisaCtx = monaLisaCanvas.getContext('2d')!
+        const monaLisaImgData = monaLisaCtx.createImageData(monaLisaCanvas.width, monaLisaCanvas.height)
+
+        for (let i = 0; i < monaLisaData.data.length; i++) {
+          monaLisaImgData.data[i * 4] = monaLisaData.data[i * 3]     // R
+          monaLisaImgData.data[i * 4 + 1] = monaLisaData.data[i * 3 + 1] // G
+          monaLisaImgData.data[i * 4 + 2] = monaLisaData.data[i * 3 + 2] // B
+          monaLisaImgData.data[i * 4 + 3] = 255 // A
+        }
+
+        monaLisaCtx.putImageData(monaLisaImgData, 0, 0)
+        const monaLisaTexture = new window.THREE.CanvasTexture(monaLisaCanvas)
+
+        // Create static noise texture (similar to noise scene)
+        const staticCanvas = document.createElement('canvas')
+        const canvasWidth = 512
+        const canvasHeight = 288
+        staticCanvas.width = canvasWidth
+        staticCanvas.height = canvasHeight
+        const staticCtx = staticCanvas.getContext('2d')!
+
+        // Generate initial static pattern
+        const staticImgData = staticCtx.createImageData(canvasWidth, canvasHeight)
+        const staticData = staticImgData.data
+
+        for (let i = 0; i < staticData.length; i += 4) {
+          const brightness = Math.random()
+          let value = 0
+
+          if (brightness > 0.85) {
+            value = 255 // Bright white pixels (15%)
+          } else if (brightness > 0.65) {
+            value = Math.floor(brightness * 180) // Gray pixels (20%)
+          } else {
+            value = Math.floor(brightness * 60) // Dark pixels (65%)
+          }
+
+          staticData[i] = value     // R
+          staticData[i + 1] = value // G
+          staticData[i + 2] = value // B
+          staticData[i + 3] = 255   // A
+        }
+
+        staticCtx.putImageData(staticImgData, 0, 0)
+        const staticTexture = new window.THREE.CanvasTexture(staticCanvas)
+
+        // Create white canvas texture
+        const whiteCanvas = document.createElement('canvas')
+        whiteCanvas.width = 512
+        whiteCanvas.height = 512
+        const whiteCtx = whiteCanvas.getContext('2d')!
+        whiteCtx.fillStyle = '#FFFFFF'
+        whiteCtx.fillRect(0, 0, 512, 512)
+        const whiteTexture = new window.THREE.CanvasTexture(whiteCanvas)
+
+        // Create two Mona Lisa planes with hover effects
+        const aspectRatio = monaLisaData.width / monaLisaData.height
+        const height = 8 // Increased from 6 to make images bigger
+        const width = height * aspectRatio
+
+        // Improve texture quality
+        monaLisaTexture.magFilter = window.THREE.LinearFilter // Better quality
+        monaLisaTexture.minFilter = window.THREE.LinearFilter
+        monaLisaTexture.generateMipmaps = true
+
+        staticTexture.magFilter = window.THREE.LinearFilter
+        staticTexture.minFilter = window.THREE.LinearFilter
+        staticTexture.generateMipmaps = true
+
+        // First Mona Lisa (left) - with white canvas effect
+        const geometry1 = new window.THREE.PlaneGeometry(width, height)
+        const material1 = new window.THREE.ShaderMaterial({
+          uniforms: {
+            uTexture: { value: monaLisaTexture },
+            uWhiteTexture: { value: whiteTexture },
+            uHover: { value: 0.0 },
+            uTime: { value: 0.0 },
+            uMousePos: { value: new window.THREE.Vector2(0.5, 0.5) },
+            uBrushSize: { value: 0.15 } // Brush radius in UV coordinates
+          },
+          vertexShader: `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            uniform sampler2D uTexture;
+            uniform sampler2D uWhiteTexture;
+            uniform float uHover;
+            uniform vec2 uMousePos;
+            uniform float uBrushSize;
+            varying vec2 vUv;
+
+            void main() {
+              vec4 monaLisa = texture2D(uTexture, vUv);
+              vec4 whiteCanvas = texture2D(uWhiteTexture, vUv);
+
+              // Calculate distance from current pixel to mouse position
+              float distance = length(vUv - uMousePos);
+
+              // Create smooth brush effect - only apply effect within brush radius
+              float brushEffect = 1.0 - smoothstep(0.0, uBrushSize, distance);
+
+              // Apply the effect only in the brush area
+              gl_FragColor = mix(monaLisa, whiteCanvas, brushEffect * uHover);
+            }
+          `,
+          transparent: true
         })
-        const sphere = new window.THREE.Mesh(geometry, material)
-        return [sphere]
+
+        const monaLisa1 = new window.THREE.Mesh(geometry1, material1)
+        monaLisa1.position.set(-width/2 - 0.5, 2, 0) // Left position, moved up (y=2)
+
+        // Second Mona Lisa (right) - with static noise effect
+        const geometry2 = new window.THREE.PlaneGeometry(width, height)
+        const material2 = new window.THREE.ShaderMaterial({
+          uniforms: {
+            uTexture: { value: monaLisaTexture },
+            uNoiseTexture: { value: staticTexture },
+            uHover: { value: 0.0 },
+            uTime: { value: 0.0 },
+            uMousePos: { value: new window.THREE.Vector2(0.5, 0.5) },
+            uBrushSize: { value: 0.15 } // Brush radius in UV coordinates
+          },
+          vertexShader: `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            uniform sampler2D uTexture;
+            uniform sampler2D uNoiseTexture;
+            uniform float uHover;
+            uniform vec2 uMousePos;
+            uniform float uBrushSize;
+            varying vec2 vUv;
+
+            void main() {
+              vec4 monaLisa = texture2D(uTexture, vUv);
+              vec4 noise = texture2D(uNoiseTexture, vUv);
+
+              // Calculate distance from current pixel to mouse position
+              float distance = length(vUv - uMousePos);
+
+              // Create smooth brush effect - only apply effect within brush radius
+              float brushEffect = 1.0 - smoothstep(0.0, uBrushSize, distance);
+
+              // Apply the effect only in the brush area
+              gl_FragColor = mix(monaLisa, noise, brushEffect * uHover);
+            }
+          `,
+          transparent: true
+        })
+
+        const monaLisa2 = new window.THREE.Mesh(geometry2, material2)
+        monaLisa2.position.set(width/2 + 0.5, 2, 0) // Right position, moved up (y=2)
+
+        // Store references for hover detection and animation updates
+        monaLisa1.userData = {
+          isHovered: false,
+          material: material1,
+          staticData: null,
+          staticCtx: null,
+          staticTexture: null,
+          lastUpdate: 0,
+          updateInterval: 50
+        }
+
+        monaLisa2.userData = {
+          isHovered: false,
+          material: material2,
+          staticData: staticData,
+          staticCtx: staticCtx,
+          staticTexture: staticTexture,
+          imageData: staticImgData,
+          canvasWidth,
+          canvasHeight,
+          lastUpdate: 0,
+          updateInterval: 50
+        }
+
+        return [monaLisa1, monaLisa2]
       },
 
       'pixels': async () => {
@@ -1474,22 +1659,100 @@ function App() {
       requestAnimationFrame(animate)
       const objects = scene.children
       const targetRot = { x: mouse.y * 0.1, y: mouse.x * 0.1 }
-      
+
       scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.02
       scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.02
+
+      // Update mouse vector for raycasting
+      mouseVector.set(mouse.x, mouse.y)
+      raycaster.setFromCamera(mouseVector, camera)
 
       // Simple animations
       switch(animationState) {
         case 'quantum':
-          // First phase - simple subtle animation
-          if (objects[0]) {
-            const sphere = objects[0]
-            const time = Date.now() * 0.001
-            // Subtle breathing effect
-            const scale = 1 + Math.sin(time * 1.5) * 0.05
-            sphere.scale.setScalar(scale)
-            // Gentle rotation
-            sphere.rotation.y += 0.001
+          // Handle hover detection for Mona Lisa images
+          if (objects.length >= 2) {
+            const monaLisa1 = objects[0] // Left image (white canvas effect)
+            const monaLisa2 = objects[1] // Right image (static noise effect)
+            const currentTime = Date.now()
+
+            // Perform raycasting to detect hover
+            const intersects = raycaster.intersectObjects([monaLisa1, monaLisa2])
+
+            // Reset hover states
+            let isHoveringMonaLisa1 = false
+            let isHoveringMonaLisa2 = false
+            let mouseUV1 = new window.THREE.Vector2(0.5, 0.5) // Default center
+            let mouseUV2 = new window.THREE.Vector2(0.5, 0.5) // Default center
+
+            // Check if mouse is hovering over any of the images
+            if (intersects.length > 0) {
+              const intersect = intersects[0]
+              const intersectedObject = intersect.object
+
+              // Get UV coordinates of intersection point
+              const uv = intersect.uv
+
+              if (intersectedObject === monaLisa1) {
+                isHoveringMonaLisa1 = true
+                mouseUV1 = uv
+              } else if (intersectedObject === monaLisa2) {
+                isHoveringMonaLisa2 = true
+                mouseUV2 = uv
+              }
+            }
+
+            // Update mouse position uniforms
+            monaLisa1.material.uniforms.uMousePos.value = mouseUV1
+            monaLisa2.material.uniforms.uMousePos.value = mouseUV2
+
+            // Update hover uniforms with smooth transitions
+            const targetHover1 = isHoveringMonaLisa1 ? 1.0 : 0.0
+            const targetHover2 = isHoveringMonaLisa2 ? 1.0 : 0.0
+
+            const currentHover1 = monaLisa1.material.uniforms.uHover.value
+            const currentHover2 = monaLisa2.material.uniforms.uHover.value
+
+            // Smooth transition (lerp)
+            monaLisa1.material.uniforms.uHover.value += (targetHover1 - currentHover1) * 0.1
+            monaLisa2.material.uniforms.uHover.value += (targetHover2 - currentHover2) * 0.1
+
+            // Update time uniform for both materials
+            monaLisa1.material.uniforms.uTime.value = currentTime * 0.001
+            monaLisa2.material.uniforms.uTime.value = currentTime * 0.001
+
+            // Handle static noise animation for second image when hovered
+            if (isHoveringMonaLisa2 && monaLisa2.userData.staticData) {
+              const userData = monaLisa2.userData
+              if (currentTime - userData.lastUpdate > userData.updateInterval) {
+                userData.lastUpdate = currentTime
+
+                const { staticData, staticCtx, staticTexture, canvasWidth, canvasHeight } = userData
+
+                // Regenerate static pattern
+                for (let i = 0; i < staticData.length; i += 4) {
+                  const brightness = Math.random()
+                  let value = 0
+
+                  if (brightness > 0.85) {
+                    value = 255 // Bright white pixels (15%)
+                  } else if (brightness > 0.65) {
+                    value = Math.floor(brightness * 180) // Gray pixels (20%)
+                  } else {
+                    value = Math.floor(brightness * 60) // Dark pixels (65%)
+                  }
+
+                  staticData[i] = value     // R
+                  staticData[i + 1] = value // G
+                  staticData[i + 2] = value // B
+                  // Alpha remains 255
+                }
+
+                // Update canvas and texture
+                staticCtx.putImageData(userData.imageData, 0, 0)
+                staticTexture.needsUpdate = true
+              }
+            }
           }
           break
         case 'pixels':
