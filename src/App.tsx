@@ -817,14 +817,32 @@ function App() {
         const height = 8 // Increased from 6 to make images bigger
         const width = height * aspectRatio
 
-        // Improve texture quality
-        monaLisaTexture.magFilter = window.THREE.LinearFilter // Better quality
-        monaLisaTexture.minFilter = window.THREE.LinearFilter
+        // Improve texture quality for high-resolution display
+        monaLisaTexture.magFilter = window.THREE.LinearFilter // Best for magnification
+        monaLisaTexture.minFilter = window.THREE.LinearMipMapLinearFilter // Best for minification with mipmaps
         monaLisaTexture.generateMipmaps = true
+        monaLisaTexture.format = window.THREE.RGBAFormat
+        monaLisaTexture.type = window.THREE.UnsignedByteType
+        monaLisaTexture.encoding = window.THREE.sRGBEncoding
+
+        // Add anisotropic filtering for better quality at angles (if supported)
+        if (window.THREE.Texture.anisotropy !== undefined) {
+          const maxAnisotropy = window.THREE.WebGLRenderer.capabilities.getMaxAnisotropy()
+          monaLisaTexture.anisotropy = Math.min(maxAnisotropy, 8)
+        }
 
         sketchTexture.magFilter = window.THREE.LinearFilter
-        sketchTexture.minFilter = window.THREE.LinearFilter
+        sketchTexture.minFilter = window.THREE.LinearMipMapLinearFilter
         sketchTexture.generateMipmaps = true
+        sketchTexture.format = window.THREE.RGBAFormat
+        sketchTexture.type = window.THREE.UnsignedByteType
+        sketchTexture.encoding = window.THREE.sRGBEncoding
+
+        // Add anisotropic filtering for sketch texture too
+        if (window.THREE.Texture.anisotropy !== undefined) {
+          const maxAnisotropy = window.THREE.WebGLRenderer.capabilities.getMaxAnisotropy()
+          sketchTexture.anisotropy = Math.min(maxAnisotropy, 8)
+        }
 
         staticTexture.magFilter = window.THREE.LinearFilter
         staticTexture.minFilter = window.THREE.LinearFilter
