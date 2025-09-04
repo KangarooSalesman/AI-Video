@@ -763,14 +763,54 @@ function App() {
         staticCtx.putImageData(staticImgData, 0, 0)
         const staticTexture = new window.THREE.CanvasTexture(staticCanvas)
 
-        // Create white canvas texture
-        const whiteCanvas = document.createElement('canvas')
-        whiteCanvas.width = 512
-        whiteCanvas.height = 512
-        const whiteCtx = whiteCanvas.getContext('2d')!
-        whiteCtx.fillStyle = '#FFFFFF'
-        whiteCtx.fillRect(0, 0, 512, 512)
-        const whiteTexture = new window.THREE.CanvasTexture(whiteCanvas)
+        // Create sketch/underpainting texture from Mona Lisa
+        const createSketchTexture = (imageData: {data: Uint8Array, width: number, height: number}) => {
+          const sketchCanvas = document.createElement('canvas')
+          sketchCanvas.width = imageData.width
+          sketchCanvas.height = imageData.height
+          const sketchCtx = sketchCanvas.getContext('2d')!
+
+          // Create sketch image data
+          const sketchImgData = sketchCtx.createImageData(sketchCanvas.width, sketchCanvas.height)
+          const sketchData = sketchImgData.data
+
+          // Apply sketch/underpainting effect
+          for (let y = 0; y < imageData.height; y++) {
+            for (let x = 0; x < imageData.width; x++) {
+              const pixelIndex = (y * imageData.width + x) * 3
+              const rgbaIndex = (y * imageData.width + x) * 4
+
+              const r = imageData.data[pixelIndex]
+              const g = imageData.data[pixelIndex + 1]
+              const b = imageData.data[pixelIndex + 2]
+
+              // Convert to grayscale for sketch effect
+              const gray = Math.floor((r * 0.299 + g * 0.587 + b * 0.114))
+
+              // Apply sepia tone for "aged" underpainting look
+              const sepiaR = Math.min(255, Math.floor(gray * 0.393 + 110))
+              const sepiaG = Math.min(255, Math.floor(gray * 0.769 + 65))
+              const sepiaB = Math.min(255, Math.floor(gray * 0.189 + 30))
+
+              // Add some noise/grain for texture
+              const noise = (Math.random() - 0.5) * 20
+              const finalR = Math.max(0, Math.min(255, sepiaR + noise))
+              const finalG = Math.max(0, Math.min(255, sepiaG + noise))
+              const finalB = Math.max(0, Math.min(255, sepiaB + noise))
+
+              sketchData[rgbaIndex] = finalR     // R
+              sketchData[rgbaIndex + 1] = finalG // G
+              sketchData[rgbaIndex + 2] = finalB // B
+              sketchData[rgbaIndex + 3] = 255   // A
+            }
+          }
+
+          sketchCtx.putImageData(sketchImgData, 0, 0)
+          return new window.THREE.CanvasTexture(sketchCanvas)
+        }
+
+        // Create the sketch texture
+        const sketchTexture = createSketchTexture(monaLisaData)
 
         // Create two Mona Lisa planes with hover effects
         const aspectRatio = monaLisaData.width / monaLisaData.height
@@ -782,16 +822,20 @@ function App() {
         monaLisaTexture.minFilter = window.THREE.LinearFilter
         monaLisaTexture.generateMipmaps = true
 
+        sketchTexture.magFilter = window.THREE.LinearFilter
+        sketchTexture.minFilter = window.THREE.LinearFilter
+        sketchTexture.generateMipmaps = true
+
         staticTexture.magFilter = window.THREE.LinearFilter
         staticTexture.minFilter = window.THREE.LinearFilter
         staticTexture.generateMipmaps = true
 
-        // First Mona Lisa (left) - with white canvas effect
+        // First Mona Lisa (left) - with underpainting reveal effect
         const geometry1 = new window.THREE.PlaneGeometry(width, height)
         const material1 = new window.THREE.ShaderMaterial({
           uniforms: {
             uTexture: { value: monaLisaTexture },
-            uWhiteTexture: { value: whiteTexture },
+            uRevealTexture: { value: sketchTexture },
             uHover: { value: 0.0 },
             uTime: { value: 0.0 },
             uMousePos: { value: new window.THREE.Vector2(0.5, 0.5) },
@@ -806,15 +850,15 @@ function App() {
           `,
           fragmentShader: `
             uniform sampler2D uTexture;
-            uniform sampler2D uWhiteTexture;
+            uniform sampler2D uRevealTexture;
             uniform float uHover;
             uniform vec2 uMousePos;
             uniform float uBrushSize;
             varying vec2 vUv;
 
             void main() {
-              vec4 monaLisa = texture2D(uTexture, vUv);
-              vec4 whiteCanvas = texture2D(uWhiteTexture, vUv);
+              vec4 finalPainting = texture2D(uTexture, vUv);
+              vec4 underpainting = texture2D(uRevealTexture, vUv);
 
               // Calculate distance from current pixel to mouse position
               float distance = length(vUv - uMousePos);
@@ -822,8 +866,8 @@ function App() {
               // Create smooth brush effect - only apply effect within brush radius
               float brushEffect = 1.0 - smoothstep(0.0, uBrushSize, distance);
 
-              // Apply the effect only in the brush area
-              gl_FragColor = mix(monaLisa, whiteCanvas, brushEffect * uHover);
+              // Mix between the final painting and the sketch underpainting
+              gl_FragColor = mix(finalPainting, underpainting, brushEffect * uHover);
             }
           `,
           transparent: true
@@ -1659,7 +1703,7 @@ function App() {
       requestAnimationFrame(animate)
       const objects = scene.children
       const targetRot = { x: mouse.y * 0.1, y: mouse.x * 0.1 }
-
+      
       scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.02
       scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.02
 
