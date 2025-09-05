@@ -6,6 +6,7 @@ interface ThreeJSApp {
   switchScene: (state: string) => Promise<void>
   updatePixelZoom: (zoomLevel: number) => void
   updateImageZoom: (zoomLevel: number) => void
+  updateLatentZoom: (zoomLevel: number) => void
 }
 
 declare global {
@@ -25,6 +26,7 @@ function App() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [pixelZoomLevel, setPixelZoomLevel] = useState(0) // 0 = single pixel, 1 = zoomed out to full image
   const [imageZoomLevel, setImageZoomLevel] = useState(1.0) // 1.0 = normal, higher = zoomed in
+  const [latentZoomLevel, setLatentZoomLevel] = useState(1.0) // 1.0 = normal, higher = zoomed in for latent space
   
   const threeAppRef = useRef<ThreeJSApp | null>(null)
 
@@ -157,6 +159,7 @@ function App() {
     setHasInteracted(false)
     setIsTransitioning(false)
     setImageZoomLevel(1.0)
+    setLatentZoomLevel(1.0)
     
     if (narrativeRef.current) {
       narrativeRef.current.innerHTML = ''
@@ -201,6 +204,28 @@ function App() {
           setImageZoomLevel(newZoom)
           if (threeAppRef.current) {
             threeAppRef.current.updateImageZoom(newZoom)
+          }
+          return
+        }
+      }
+
+      // Latent space zoom controls (navigation phase)
+      if (narrativeIndex === 8) {
+        if (e.key === '+' || e.key === '=') {
+          e.preventDefault()
+          const newZoom = Math.min(latentZoomLevel * 2.0, 16.0) // Max 16x zoom
+          setLatentZoomLevel(newZoom)
+          if (threeAppRef.current) {
+            threeAppRef.current.updateLatentZoom(newZoom)
+          }
+          return
+        }
+        if (e.key === '-' || e.key === '_') {
+          e.preventDefault()
+          const newZoom = Math.max(latentZoomLevel / 2.0, 0.25) // Min 0.25x zoom
+          setLatentZoomLevel(newZoom)
+          if (threeAppRef.current) {
+            threeAppRef.current.updateLatentZoom(newZoom)
           }
           return
         }
@@ -470,6 +495,9 @@ function App() {
     let coordinateFadeStates: { [key: string]: { alpha: number, x: number, y: number, type: string, content?: string } } = {}
     let lastCoordinateUpdate = 0
     let lastScatteredUpdate = 0
+
+    // Latent space zoom level
+    let latentZoomLevel = 1.0
 
     const setupPixelsTexture = () => {
       columns = Math.floor(window.innerWidth / fontSize)
@@ -1281,14 +1309,19 @@ function App() {
 
     const updateImageZoomInternal = (zoomLevel: number) => {
       if (!pixelGroup || !pixelGroup.material) return
-      
+
       // Update shader uniform for image zoom level
       pixelGroup.material.uniforms.uImageZoom.value = zoomLevel
-      
+
       // Update text overlay to show individual pixel values when zoomed in
       if (pixelGroup.userData && pixelGroup.userData.textCtx) {
         updateZoomedPixelTextOverlay(zoomLevel)
       }
+    }
+
+    const updateLatentZoomInternal = (zoomLevel: number) => {
+      // Store the zoom level for use in animation loop
+      latentZoomLevel = zoomLevel
     }
 
     const updatePixelTextOverlay = (zoomLevel: number) => {
@@ -1815,18 +1848,9 @@ function App() {
             objects[0].rotation.y += 0.0002
             objects[0].rotation.x += 0.0001
 
-            // Slow camera drifting backwards
-            const time = Date.now() * 0.001
-            const driftSpeed = 0.001
-            const maxDriftDistance = 15
-            const baseCameraZ = 10
-
-            // Create a slow oscillating drift backwards
-            const driftOffset = Math.sin(time * 0.3) * maxDriftDistance
-            const targetZ = baseCameraZ + driftOffset
-
-            // Smooth interpolation towards target position
-            camera.position.z += (targetZ - camera.position.z) * driftSpeed
+            // Very slow camera movement forward only
+            const forwardSpeed = 0.0005 // Very slow forward movement
+            camera.position.z -= forwardSpeed
           }
           break
         case 'library':
@@ -1964,6 +1988,11 @@ function App() {
             const pulse = Math.sin(time * 2) * 0.15 + 0.9
             neurons.material.opacity = 1.0 * pulse
             connections.material.opacity = 0.8 * pulse
+
+            // Apply zoom to camera position
+            const baseDistance = 10
+            const zoomedDistance = baseDistance / latentZoomLevel
+            camera.position.z += (zoomedDistance - camera.position.z) * 0.05 // Smooth interpolation
 
             // Gentle rotation
             neurons.rotation.y += 0.0002
@@ -2106,6 +2135,10 @@ function App() {
         updateImageZoomInternal(zoomLevel)
       },
 
+      updateLatentZoom: (zoomLevel: number) => {
+        updateLatentZoomInternal(zoomLevel)
+      },
+
       cleanup: () => {
         if ((window as any).threeCleanup) {
           ;(window as any).threeCleanup()
@@ -2210,6 +2243,44 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* Latent space zoom controls */}
+          {narrativeIndex === 8 && (
+            <div className="text-center pointer-events-auto mb-8">
+              <div className="text-sm font-normal text-white/80 tracking-normal mb-3">
+                Explore the latent space
+              </div>
+              <div className="flex justify-center space-x-3 mb-2">
+                <button
+                  onClick={() => {
+                    const newZoom = Math.min(latentZoomLevel * 2.0, 16.0)
+                    setLatentZoomLevel(newZoom)
+                    if (threeAppRef.current) {
+                      threeAppRef.current.updateLatentZoom(newZoom)
+                    }
+                  }}
+                  className="px-4 py-1 bg-white/10 text-white/90 rounded text-sm hover:bg-white/20 transition-colors border border-white/20"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => {
+                    const newZoom = Math.max(latentZoomLevel / 2.0, 0.25)
+                    setLatentZoomLevel(newZoom)
+                    if (threeAppRef.current) {
+                      threeAppRef.current.updateLatentZoom(newZoom)
+                    }
+                  }}
+                  className="px-4 py-1 bg-white/10 text-white/90 rounded text-sm hover:bg-white/20 transition-colors border border-white/20"
+                >
+                  −
+                </button>
+              </div>
+              <div className="text-xs text-white/60">
+                {latentZoomLevel.toFixed(1)}x
+              </div>
+            </div>
+          )}
           
           {/* Zoom progress indicator (6 steps including image load) */}
           {narrativeIndex === 1 && pixelZoomLevel > 0 && pixelZoomLevel <= 1.0 && (
@@ -2250,12 +2321,14 @@ function App() {
               </svg>
             </div>
             <div className="text-xs text-gray-500">
-              {narrativeIndex === 1 && pixelZoomLevel < 1.0 ? 
-                `Scroll to zoom (${Math.floor(pixelZoomLevel * 5) + 1}/6) | R to reset` : 
-                narrativeIndex === 1 && pixelZoomLevel >= 1.0 ? 
+              {narrativeIndex === 1 && pixelZoomLevel < 1.0 ?
+                `Scroll to zoom (${Math.floor(pixelZoomLevel * 5) + 1}/6) | R to reset` :
+                narrativeIndex === 1 && pixelZoomLevel >= 1.0 ?
                 'Scroll to continue (6/6) | R to reset' :
                 narrativeIndex === 1 && pixelZoomLevel >= 0.6 ?
                 'Use +/- or click buttons to zoom image (2x steps, up to 32x/64x) | Scroll to continue | R to reset' :
+                narrativeIndex === 8 ?
+                'Use +/- or click buttons to zoom latent space (0.25x to 16x) | Scroll to continue | R to reset' :
                 'Scroll or press Space/↓ to continue | R to reset'
               }
             </div>
