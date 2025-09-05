@@ -397,11 +397,11 @@ function App() {
     if (pixelZoomLevel >= 0.2 && pixelZoomLevel < 0.4) {
       // Step 2/6: explain the first pixel with pure white text
       title = ''
-      text = 'in the first pixel for example, we enter 119 of red, 136 of green, and 85 of blue, and we tell it that it\'s on the top left corner 0,0.'
+      text = 'To illustrate, the pixel at the top-left corner (0,0) is assigned the color with 119 red, 136 green, and 85 blue'
     } else if (pixelZoomLevel >= 0.4 && pixelZoomLevel < 0.6) {
       // Step 3/6: add transition text
       title = ''
-      text = 'Now let\'s move back a little...'
+      text = 'Now pulling back, we start noticing the rest of the pixel grid'
     } else if (pixelZoomLevel >= 0.6 && pixelZoomLevel < 0.8) {
       // Step 4/6: hide title and text during pixel grid view
       title = ''
