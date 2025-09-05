@@ -1278,18 +1278,6 @@ function App() {
         ground.rotation.x = -Math.PI / 2 // Rotate to be horizontal
         ground.position.y = -2.2 // Position below the TV
         
-        // Create reflection of the TV static - match new TV dimensions
-        const reflectionGeometry = new window.THREE.PlaneGeometry(tvWidth, tvHeight)
-        const reflectionMaterial = new window.THREE.MeshBasicMaterial({
-          map: staticTexture,
-          transparent: true,
-          opacity: 0.15 // Much more subtle reflection
-        })
-        const reflection = new window.THREE.Mesh(reflectionGeometry, reflectionMaterial)
-        reflection.position.set(0, -1.8, -1) // Position further below for larger TV
-        reflection.rotation.x = Math.PI // Flip vertically for reflection effect
-        reflection.scale.y = 0.7 // Compress reflection vertically for perspective
-        
         // Store references for animation
         staticPlane.userData = {
           staticCanvas,
@@ -1300,11 +1288,10 @@ function App() {
           canvasWidth,
           canvasHeight,
           lastUpdate: 0,
-          updateInterval: 50, // Update every 50ms for smooth but efficient animation
-          reflection // Reference to reflection for synchronized updates
+          updateInterval: 50 // Update every 50ms for smooth but efficient animation
         }
         
-        return [staticPlane, ground, reflection]
+        return [staticPlane, ground]
       },
 
       'time': () => {
@@ -1789,7 +1776,7 @@ function App() {
               if (currentTime - userData.lastUpdate > userData.updateInterval) {
                 userData.lastUpdate = currentTime
 
-                const { staticData, staticCtx, staticTexture, canvasWidth, canvasHeight } = userData
+                const { staticData, staticCtx, staticTexture } = userData
 
                 // Regenerate static pattern
                 for (let i = 0; i < staticData.length; i += 4) {
@@ -2248,10 +2235,9 @@ function App() {
           // No animation - just text
           break
         case 'noise':
-          if (objects.length >= 3) {
+          if (objects.length >= 2) {
             const staticPlane = objects[0]
             const ground = objects[1]
-            const reflection = objects[2]
             const userData = staticPlane.userData
             const currentTime = Date.now()
 
@@ -2290,7 +2276,7 @@ function App() {
                 // Alpha remains 255
               }
 
-              // Update canvas and texture (this updates both main TV and reflection)
+              // Update canvas and texture
               staticCtx.putImageData(userData.imageData, 0, 0)
               staticTexture.needsUpdate = true
             }
@@ -2299,16 +2285,10 @@ function App() {
             const time = currentTime * 0.001
             const breathe = Math.sin(time * 1.2) * 0.02 + 0.85
             staticPlane.material.opacity = breathe
-            
-            // Reflection breathes in sync but much more subtle
-            reflection.material.opacity = (breathe - 0.7) * 0.15 // Scale down reflection opacity
 
             // Very subtle screen flicker by adjusting scale
             const flicker = 1 + Math.sin(time * 60) * 0.002
             staticPlane.scale.setScalar(flicker)
-            
-            // Reflection flickers slightly less for realism
-            reflection.scale.set(flicker * 0.98, flicker * 0.7, 1)
 
             // Subtle ground opacity variation to simulate ambient light from TV
             const groundGlow = Math.sin(time * 1.5) * 0.05 + 0.3
