@@ -499,6 +499,10 @@ function App() {
     // Latent space zoom level
     let latentZoomLevel = 1.0
 
+    // Library (Universal Archive) mosaic state
+    let libraryMesh: any
+    let libraryLastTriggerTime = 0
+
     const setupPixelsTexture = () => {
       columns = Math.floor(window.innerWidth / fontSize)
       rows = Math.floor(window.innerHeight / fontSize)
@@ -1010,36 +1014,82 @@ function App() {
         return [new window.THREE.Points(geometry, material)]
       },
 
-      'library': () => {
-        const geometry = new window.THREE.BufferGeometry()
-        const totalPoints = 100000
-        const volumeSize = 50
-        const positions = new Float32Array(totalPoints * 3)
-        const colors = new Float32Array(totalPoints * 3)
+      'library': async () => {
+        // Fullscreen plane with screen aspect
+        const screenAspectRatio = window.innerWidth / window.innerHeight
+        const height = 10
+        const width = height * screenAspectRatio
+        const geometry = new window.THREE.PlaneGeometry(width, height)
 
-        for (let i = 0; i < totalPoints; i++) {
-          const i3 = i * 3
-          const x = (Math.random() - 0.5) * volumeSize
-          const y = (Math.random() - 0.5) * volumeSize
-          const z = (Math.random() - 0.5) * volumeSize
-          positions[i3] = x
-          positions[i3 + 1] = y
-          positions[i3 + 2] = z
-          colors[i3] = (x / volumeSize) + 0.5
-          colors[i3 + 1] = (y / volumeSize) + 0.5
-          colors[i3 + 2] = (z / volumeSize) + 0.5
+        // Load reference image and create a CanvasTexture to preserve source pixels
+        const imageData = await loadExternalImage('/ζζ.jpg')
+        const canvas = document.createElement('canvas')
+        canvas.width = imageData.width
+        canvas.height = imageData.height
+        const ctx = canvas.getContext('2d')!
+        const imgData = ctx.createImageData(canvas.width, canvas.height)
+        for (let i = 0; i < imageData.data.length; i++) {
+          imgData.data[i * 4] = imageData.data[i * 3]
+          imgData.data[i * 4 + 1] = imageData.data[i * 3 + 1]
+          imgData.data[i * 4 + 2] = imageData.data[i * 3 + 2]
+          imgData.data[i * 4 + 3] = 255
         }
-        
-        geometry.setAttribute('position', new window.THREE.BufferAttribute(positions, 3))
-        geometry.setAttribute('color', new window.THREE.BufferAttribute(colors, 3))
-        const material = new window.THREE.PointsMaterial({ 
-          size: 0.05, 
-          vertexColors: true, 
-          blending: window.THREE.AdditiveBlending, 
-          transparent: true, 
-          opacity: 0.7 
+        ctx.putImageData(imgData, 0, 0)
+        const tex = new window.THREE.CanvasTexture(canvas)
+        tex.magFilter = window.THREE.NearestFilter
+        tex.minFilter = window.THREE.LinearFilter
+
+        const material = new window.THREE.ShaderMaterial({
+          uniforms: {
+            uToTexture: { value: tex },
+            uProgress: { value: 0.0 },
+            uTileCount: { value: 64.0 },
+            uSeed: { value: Math.random() * 1000.0 }
+          },
+          vertexShader: `
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            precision highp float;
+            uniform sampler2D uToTexture;
+            uniform float uProgress;
+            uniform float uTileCount;
+            uniform float uSeed;
+            varying vec2 vUv;
+
+            float rand(vec2 co) {
+              return fract(sin(dot(co + uSeed, vec2(12.9898,78.233))) * 43758.5453);
+            }
+
+            void main() {
+              vec2 tiles = vec2(uTileCount, uTileCount);
+              vec2 tileCoord = floor(vUv * tiles);
+              vec2 tileCenterUv = (tileCoord + 0.5) / tiles;
+
+              float r = rand(tileCoord);
+              float tileProgress = smoothstep(0.0, 1.0, uProgress * 1.2 - r * 0.5);
+
+              vec2 sampleUv = mix(tileCenterUv, vUv, tileProgress);
+              vec4 color = texture2D(uToTexture, sampleUv);
+              gl_FragColor = color;
+            }
+          `,
+          transparent: false
         })
-        return [new window.THREE.Points(geometry, material)]
+
+        libraryMesh = new window.THREE.Mesh(geometry, material)
+        libraryMesh.userData = {
+          textures: [tex],
+          currentIndex: 0,
+          isTransitioning: false,
+          progressStartTime: 0,
+          transitionDurationMs: 2000
+        }
+        return [libraryMesh]
       },
 
             'noise': () => {
@@ -1855,8 +1905,16 @@ function App() {
           break
         case 'library':
           if (objects[0]) {
-            objects[0].rotation.y += 0.0002
-            objects[0].rotation.x += 0.0001
+            objects[0].rotation.y += 0.0001
+            if (libraryMesh && libraryMesh.userData.isTransitioning) {
+              const now = Date.now()
+              const elapsed = (now - libraryMesh.userData.progressStartTime) / libraryMesh.userData.transitionDurationMs
+              const eased = Math.min(1.0, Math.max(0.0, elapsed))
+              libraryMesh.material.uniforms.uProgress.value = eased
+              if (eased >= 1.0) {
+                libraryMesh.userData.isTransitioning = false
+              }
+            }
           }
           break
         case 'navigation':
@@ -2087,6 +2145,24 @@ function App() {
         const handleMouseMove = (e: MouseEvent) => {
           mouse.x = (e.clientX / window.innerWidth) * 2 - 1
           mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
+
+          // Trigger mosaic -> image transition on hover during library scene
+          if (animationState === 'library') {
+            const now = Date.now()
+            if (libraryMesh && !libraryMesh.userData.isTransitioning && now - libraryLastTriggerTime > 250) {
+              libraryLastTriggerTime = now
+              const textures = libraryMesh.userData.textures as any[]
+              if (textures && textures.length > 0) {
+                const nextIndex = (libraryMesh.userData.currentIndex + 1) % textures.length
+                libraryMesh.userData.currentIndex = nextIndex
+                libraryMesh.material.uniforms.uToTexture.value = textures[nextIndex]
+              }
+              libraryMesh.material.uniforms.uSeed.value = Math.random() * 1000.0
+              libraryMesh.material.uniforms.uProgress.value = 0.0
+              libraryMesh.userData.isTransitioning = true
+              libraryMesh.userData.progressStartTime = now
+            }
+          }
         }
 
         const handleResize = () => {
