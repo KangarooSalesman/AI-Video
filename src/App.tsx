@@ -710,261 +710,63 @@ function App() {
 
     const sceneInitializers: { [key: string]: () => any[] | Promise<any[]> } = {
       'quantum': async () => {
-        // Load Mona Lisa image
-        const monaLisaData = await loadExternalImage('/mona_lisa.jpg')
-
-        // Create canvas and texture for Mona Lisa
-        const monaLisaCanvas = document.createElement('canvas')
-        monaLisaCanvas.width = monaLisaData.width
-        monaLisaCanvas.height = monaLisaData.height
-        const monaLisaCtx = monaLisaCanvas.getContext('2d')!
-        const monaLisaImgData = monaLisaCtx.createImageData(monaLisaCanvas.width, monaLisaCanvas.height)
-
-        for (let i = 0; i < monaLisaData.data.length; i++) {
-          monaLisaImgData.data[i * 4] = monaLisaData.data[i * 3]     // R
-          monaLisaImgData.data[i * 4 + 1] = monaLisaData.data[i * 3 + 1] // G
-          monaLisaImgData.data[i * 4 + 2] = monaLisaData.data[i * 3 + 2] // B
-          monaLisaImgData.data[i * 4 + 3] = 255 // A
-        }
-
-        monaLisaCtx.putImageData(monaLisaImgData, 0, 0)
-        const monaLisaTexture = new window.THREE.CanvasTexture(monaLisaCanvas)
-
-        // Create static noise texture (similar to noise scene)
-        const staticCanvas = document.createElement('canvas')
-        const canvasWidth = 512
-        const canvasHeight = 288
-        staticCanvas.width = canvasWidth
-        staticCanvas.height = canvasHeight
-        const staticCtx = staticCanvas.getContext('2d')!
-
-        // Generate initial static pattern
-        const staticImgData = staticCtx.createImageData(canvasWidth, canvasHeight)
-        const staticData = staticImgData.data
-
-        for (let i = 0; i < staticData.length; i += 4) {
-          const brightness = Math.random()
-          let value = 0
-
-          if (brightness > 0.85) {
-            value = 255 // Bright white pixels (15%)
-          } else if (brightness > 0.65) {
-            value = Math.floor(brightness * 180) // Gray pixels (20%)
-          } else {
-            value = Math.floor(brightness * 60) // Dark pixels (65%)
-          }
-
-          staticData[i] = value     // R
-          staticData[i + 1] = value // G
-          staticData[i + 2] = value // B
-          staticData[i + 3] = 255   // A
-        }
-
-        staticCtx.putImageData(staticImgData, 0, 0)
-        const staticTexture = new window.THREE.CanvasTexture(staticCanvas)
-
-        // Create sketch/underpainting texture from Mona Lisa
-        const createSketchTexture = (imageData: {data: Uint8Array, width: number, height: number}) => {
-          const sketchCanvas = document.createElement('canvas')
-          sketchCanvas.width = imageData.width
-          sketchCanvas.height = imageData.height
-          const sketchCtx = sketchCanvas.getContext('2d')!
-
-          // Create sketch image data
-          const sketchImgData = sketchCtx.createImageData(sketchCanvas.width, sketchCanvas.height)
-          const sketchData = sketchImgData.data
-
-          // Apply sketch/underpainting effect
-          for (let y = 0; y < imageData.height; y++) {
-            for (let x = 0; x < imageData.width; x++) {
-              const pixelIndex = (y * imageData.width + x) * 3
-              const rgbaIndex = (y * imageData.width + x) * 4
-
-              const r = imageData.data[pixelIndex]
-              const g = imageData.data[pixelIndex + 1]
-              const b = imageData.data[pixelIndex + 2]
-
-              // Convert to grayscale for sketch effect
-              const gray = Math.floor((r * 0.299 + g * 0.587 + b * 0.114))
-
-              // Apply sepia tone for "aged" underpainting look
-              const sepiaR = Math.min(255, Math.floor(gray * 0.393 + 110))
-              const sepiaG = Math.min(255, Math.floor(gray * 0.769 + 65))
-              const sepiaB = Math.min(255, Math.floor(gray * 0.189 + 30))
-
-              // Add some noise/grain for texture
-              const noise = (Math.random() - 0.5) * 20
-              const finalR = Math.max(0, Math.min(255, sepiaR + noise))
-              const finalG = Math.max(0, Math.min(255, sepiaG + noise))
-              const finalB = Math.max(0, Math.min(255, sepiaB + noise))
-
-              sketchData[rgbaIndex] = finalR     // R
-              sketchData[rgbaIndex + 1] = finalG // G
-              sketchData[rgbaIndex + 2] = finalB // B
-              sketchData[rgbaIndex + 3] = 255   // A
-            }
-          }
-
-          sketchCtx.putImageData(sketchImgData, 0, 0)
-          return new window.THREE.CanvasTexture(sketchCanvas)
-        }
-
-        // Create the sketch texture
-        const sketchTexture = createSketchTexture(monaLisaData)
-
-        // Create two Mona Lisa planes with hover effects
-        const aspectRatio = monaLisaData.width / monaLisaData.height
-        const height = 8 // Increased from 6 to make images bigger
-        const width = height * aspectRatio
-
-        // Improve texture quality for high-resolution display
-        monaLisaTexture.magFilter = window.THREE.LinearFilter // Best for magnification
-        monaLisaTexture.minFilter = window.THREE.LinearMipMapLinearFilter // Best for minification with mipmaps
-        monaLisaTexture.generateMipmaps = true
-        monaLisaTexture.format = window.THREE.RGBAFormat
-        monaLisaTexture.type = window.THREE.UnsignedByteType
-        monaLisaTexture.encoding = window.THREE.sRGBEncoding
-
-        // Add anisotropic filtering for better quality at angles (if supported)
-        if (window.THREE.Texture.anisotropy !== undefined) {
-          const maxAnisotropy = window.THREE.WebGLRenderer.capabilities.getMaxAnisotropy()
-          monaLisaTexture.anisotropy = Math.min(maxAnisotropy, 8)
-        }
-
-        sketchTexture.magFilter = window.THREE.LinearFilter
-        sketchTexture.minFilter = window.THREE.LinearMipMapLinearFilter
-        sketchTexture.generateMipmaps = true
-        sketchTexture.format = window.THREE.RGBAFormat
-        sketchTexture.type = window.THREE.UnsignedByteType
-        sketchTexture.encoding = window.THREE.sRGBEncoding
-
-        // Add anisotropic filtering for sketch texture too
-        if (window.THREE.Texture.anisotropy !== undefined) {
-          const maxAnisotropy = window.THREE.WebGLRenderer.capabilities.getMaxAnisotropy()
-          sketchTexture.anisotropy = Math.min(maxAnisotropy, 8)
-        }
-
-        staticTexture.magFilter = window.THREE.LinearFilter
-        staticTexture.minFilter = window.THREE.LinearFilter
-        staticTexture.generateMipmaps = true
-
-        // First Mona Lisa (left) - with underpainting reveal effect
-        const geometry1 = new window.THREE.PlaneGeometry(width, height)
-        const material1 = new window.THREE.ShaderMaterial({
+        // The Genesis Pixel - A single pixel that cycles through the color spectrum
+        // Create a minimal geometry for the pixel (prominent size for visibility)
+        const pixelSize = 0.3 // Larger pixel size for better visibility
+        const geometry = new window.THREE.PlaneGeometry(pixelSize, pixelSize)
+        
+        // Create a shader material for the color-cycling pixel
+        const material = new window.THREE.ShaderMaterial({
           uniforms: {
-            uTexture: { value: monaLisaTexture },
-            uRevealTexture: { value: sketchTexture },
-            uHover: { value: 0.0 },
             uTime: { value: 0.0 },
-            uMousePos: { value: new window.THREE.Vector2(0.5, 0.5) },
-            uBrushSize: { value: 0.15 } // Brush radius in UV coordinates
+            uMouseDistance: { value: 1.0 }, // Distance from mouse (1.0 = far, 0.0 = close)
+            uBrightness: { value: 1.0 }
           },
           vertexShader: `
-            varying vec2 vUv;
             void main() {
-              vUv = uv;
               gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
             }
           `,
           fragmentShader: `
-            uniform sampler2D uTexture;
-            uniform sampler2D uRevealTexture;
-            uniform float uHover;
-            uniform vec2 uMousePos;
-            uniform float uBrushSize;
-            varying vec2 vUv;
-
+            uniform float uTime;
+            uniform float uMouseDistance;
+            uniform float uBrightness;
+            
+            // HSV to RGB conversion
+            vec3 hsv2rgb(vec3 c) {
+              vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+              vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+              return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+            }
+            
             void main() {
-              vec4 finalPainting = texture2D(uTexture, vUv);
-              vec4 underpainting = texture2D(uRevealTexture, vUv);
-
-              // Calculate distance from current pixel to mouse position
-              float distance = length(vUv - uMousePos);
-
-              // Create smooth brush effect - only apply effect within brush radius
-              float brushEffect = 1.0 - smoothstep(0.0, uBrushSize, distance);
-
-              // Mix between the final painting and the sketch underpainting
-              gl_FragColor = mix(finalPainting, underpainting, brushEffect * uHover);
+              // Cycle through hue based on time and mouse interaction
+              float speed = mix(0.5, 2.0, 1.0 - uMouseDistance); // Faster when mouse is closer
+              float hue = mod(uTime * speed, 1.0);
+              
+              // Full saturation and brightness affected by mouse distance
+              float saturation = 1.0;
+              float brightness = mix(0.3, 1.0, 1.0 - uMouseDistance) * uBrightness;
+              
+              vec3 color = hsv2rgb(vec3(hue, saturation, brightness));
+              gl_FragColor = vec4(color, 1.0);
             }
           `,
-          transparent: true
+          transparent: false
         })
 
-        const monaLisa1 = new window.THREE.Mesh(geometry1, material1)
-        monaLisa1.position.set(-width/2 - 0.5, 2, 0) // Left position, moved up (y=2)
-
-        // Second Mona Lisa (right) - with static noise effect
-        const geometry2 = new window.THREE.PlaneGeometry(width, height)
-        const material2 = new window.THREE.ShaderMaterial({
-          uniforms: {
-            uTexture: { value: monaLisaTexture },
-            uNoiseTexture: { value: staticTexture },
-            uHover: { value: 0.0 },
-            uTime: { value: 0.0 },
-            uMousePos: { value: new window.THREE.Vector2(0.5, 0.5) },
-            uBrushSize: { value: 0.15 } // Brush radius in UV coordinates
-          },
-          vertexShader: `
-            varying vec2 vUv;
-            void main() {
-              vUv = uv;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-          `,
-          fragmentShader: `
-            uniform sampler2D uTexture;
-            uniform sampler2D uNoiseTexture;
-            uniform float uHover;
-            uniform vec2 uMousePos;
-            uniform float uBrushSize;
-            varying vec2 vUv;
-
-            void main() {
-              vec4 monaLisa = texture2D(uTexture, vUv);
-              vec4 noise = texture2D(uNoiseTexture, vUv);
-
-              // Calculate distance from current pixel to mouse position
-              float distance = length(vUv - uMousePos);
-
-              // Create smooth brush effect - only apply effect within brush radius
-              float brushEffect = 1.0 - smoothstep(0.0, uBrushSize, distance);
-
-              // Apply the effect only in the brush area
-              gl_FragColor = mix(monaLisa, noise, brushEffect * uHover);
-            }
-          `,
-          transparent: true
-        })
-
-        const monaLisa2 = new window.THREE.Mesh(geometry2, material2)
-        monaLisa2.position.set(width/2 + 0.5, 2, 0) // Right position, moved up (y=2)
-
-        // Store references for hover detection and animation updates
-        monaLisa1.userData = {
-          isHovered: false,
-          material: material1,
-          staticData: null,
-          staticCtx: null,
-          staticTexture: null,
-          lastUpdate: 0,
-          updateInterval: 50
+        // Create the pixel mesh
+        const genesisPixel = new window.THREE.Mesh(geometry, material)
+        genesisPixel.position.set(0, 0, 0) // Center of the screen
+        
+        // Store references for animation and interaction
+        genesisPixel.userData = {
+          material: material,
+          startTime: Date.now(),
+          mouseDistance: 1.0
         }
 
-        monaLisa2.userData = {
-          isHovered: false,
-          material: material2,
-          staticData: staticData,
-          staticCtx: staticCtx,
-          staticTexture: staticTexture,
-          imageData: staticImgData,
-          canvasWidth,
-          canvasHeight,
-          lastUpdate: 0,
-          updateInterval: 50
-        }
-
-        return [monaLisa1, monaLisa2]
+        return [genesisPixel]
       },
 
       'pixels': async () => {
@@ -1719,89 +1521,31 @@ function App() {
       // Simple animations
       switch(animationState) {
         case 'quantum':
-          // Handle hover detection for Mona Lisa images
-          if (objects.length >= 2) {
-            const monaLisa1 = objects[0] // Left image (white canvas effect)
-            const monaLisa2 = objects[1] // Right image (static noise effect)
+          // Handle Genesis Pixel animation and mouse interaction
+          if (objects.length >= 1) {
+            const genesisPixel = objects[0]
             const currentTime = Date.now()
-
-            // Perform raycasting to detect hover
-            const intersects = raycaster.intersectObjects([monaLisa1, monaLisa2])
-
-            // Reset hover states
-            let isHoveringMonaLisa1 = false
-            let isHoveringMonaLisa2 = false
-            let mouseUV1 = new window.THREE.Vector2(0.5, 0.5) // Default center
-            let mouseUV2 = new window.THREE.Vector2(0.5, 0.5) // Default center
-
-            // Check if mouse is hovering over any of the images
-            if (intersects.length > 0) {
-              const intersect = intersects[0]
-              const intersectedObject = intersect.object
-
-              // Get UV coordinates of intersection point
-              const uv = intersect.uv
-
-              if (intersectedObject === monaLisa1) {
-                isHoveringMonaLisa1 = true
-                mouseUV1 = uv
-              } else if (intersectedObject === monaLisa2) {
-                isHoveringMonaLisa2 = true
-                mouseUV2 = uv
-              }
-            }
-
-            // Update mouse position uniforms
-            monaLisa1.material.uniforms.uMousePos.value = mouseUV1
-            monaLisa2.material.uniforms.uMousePos.value = mouseUV2
-
-            // Update hover uniforms with smooth transitions
-            const targetHover1 = isHoveringMonaLisa1 ? 1.0 : 0.0
-            const targetHover2 = isHoveringMonaLisa2 ? 1.0 : 0.0
-
-            const currentHover1 = monaLisa1.material.uniforms.uHover.value
-            const currentHover2 = monaLisa2.material.uniforms.uHover.value
-
-            // Smooth transition (lerp)
-            monaLisa1.material.uniforms.uHover.value += (targetHover1 - currentHover1) * 0.1
-            monaLisa2.material.uniforms.uHover.value += (targetHover2 - currentHover2) * 0.1
-
-            // Update time uniform for both materials
-            monaLisa1.material.uniforms.uTime.value = currentTime * 0.001
-            monaLisa2.material.uniforms.uTime.value = currentTime * 0.001
-
-            // Handle static noise animation for second image when hovered
-            if (isHoveringMonaLisa2 && monaLisa2.userData.staticData) {
-              const userData = monaLisa2.userData
-              if (currentTime - userData.lastUpdate > userData.updateInterval) {
-                userData.lastUpdate = currentTime
-
-                const { staticData, staticCtx, staticTexture } = userData
-
-                // Regenerate static pattern
-                for (let i = 0; i < staticData.length; i += 4) {
-                  const brightness = Math.random()
-                  let value = 0
-
-                  if (brightness > 0.85) {
-                    value = 255 // Bright white pixels (15%)
-                  } else if (brightness > 0.65) {
-                    value = Math.floor(brightness * 180) // Gray pixels (20%)
-                  } else {
-                    value = Math.floor(brightness * 60) // Dark pixels (65%)
-                  }
-
-                  staticData[i] = value     // R
-                  staticData[i + 1] = value // G
-                  staticData[i + 2] = value // B
-                  // Alpha remains 255
-                }
-
-                // Update canvas and texture
-                staticCtx.putImageData(userData.imageData, 0, 0)
-                staticTexture.needsUpdate = true
-              }
-            }
+            
+            // Calculate mouse distance from center of screen
+            const centerX = window.innerWidth / 2
+            const centerY = window.innerHeight / 2
+            const mouseX = mouse.x * window.innerWidth / 2 + window.innerWidth / 2
+            const mouseY = -mouse.y * window.innerHeight / 2 + window.innerHeight / 2
+            
+            const distanceX = mouseX - centerX
+            const distanceY = mouseY - centerY
+            const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY)
+            
+            // Normalize distance (0 = at center, 1 = at edge of screen)
+            const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY)
+            const normalizedDistance = Math.min(distance / maxDistance, 1.0)
+            
+            // Update uniforms
+            genesisPixel.material.uniforms.uTime.value = (currentTime - genesisPixel.userData.startTime) * 0.001
+            genesisPixel.material.uniforms.uMouseDistance.value = normalizedDistance
+            
+            // Store mouse distance for reference
+            genesisPixel.userData.mouseDistance = normalizedDistance
           }
           break
         case 'pixels':
