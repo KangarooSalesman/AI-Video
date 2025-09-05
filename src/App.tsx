@@ -1542,10 +1542,10 @@ function App() {
     const animate = () => {
       requestAnimationFrame(animate)
       const objects = scene.children
-      const targetRot = { x: mouse.y * 0.1, y: mouse.x * 0.1 }
-      
-      scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.02
-      scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.02
+      const targetRot = { x: mouse.y * 0.2, y: mouse.x * 0.2 }
+
+      scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.05
+      scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.05
 
       // Update mouse vector for raycasting
       mouseVector.set(mouse.x, mouse.y)
@@ -2247,10 +2247,10 @@ function App() {
           {/* Latent space zoom controls */}
           {narrativeIndex === 8 && (
             <div className="text-center pointer-events-auto mb-8">
-              <div className="text-sm font-normal text-white/80 tracking-normal mb-3">
-                Explore the latent space
+              <div className="text-xs text-white/60 mb-2">
+                {latentZoomLevel.toFixed(1)}x
               </div>
-              <div className="flex justify-center space-x-3 mb-2">
+              <div className="flex justify-center space-x-3">
                 <button
                   onClick={() => {
                     const newZoom = Math.min(latentZoomLevel * 2.0, 16.0)
@@ -2275,9 +2275,6 @@ function App() {
                 >
                   −
                 </button>
-              </div>
-              <div className="text-xs text-white/60">
-                {latentZoomLevel.toFixed(1)}x
               </div>
             </div>
           )}
