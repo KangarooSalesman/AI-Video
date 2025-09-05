@@ -712,7 +712,7 @@ function App() {
       'quantum': async () => {
         // The Genesis Pixel - A single pixel that cycles through the color spectrum
         // Create a minimal geometry for the pixel (prominent size for visibility)
-        const pixelSize = 0.3 // Larger pixel size for better visibility
+        const pixelSize = 0.9 // Larger pixel size for better visibility
         const geometry = new window.THREE.PlaneGeometry(pixelSize, pixelSize)
         
         // Create a shader material for the color-cycling pixel
@@ -740,14 +740,14 @@ function App() {
             }
             
             void main() {
-              // Cycle through hue based on time and mouse interaction
-              float speed = mix(0.5, 2.0, 1.0 - uMouseDistance); // Faster when mouse is closer
+              // Cycle through hue very slowly and gently for accessibility
+              float speed = mix(0.05, 0.15, 1.0 - uMouseDistance); // Much slower, gentler speed variation
               float hue = mod(uTime * speed, 1.0);
-              
-              // Full saturation and brightness affected by mouse distance
-              float saturation = 1.0;
-              float brightness = mix(0.3, 1.0, 1.0 - uMouseDistance) * uBrightness;
-              
+
+              // Reduced saturation for gentler color transitions
+              float saturation = 0.8;
+              float brightness = mix(0.5, 0.9, 1.0 - uMouseDistance) * uBrightness;
+
               vec3 color = hsv2rgb(vec3(hue, saturation, brightness));
               gl_FragColor = vec4(color, 1.0);
             }
@@ -1525,7 +1525,7 @@ function App() {
           if (objects.length >= 1) {
             const genesisPixel = objects[0]
             const currentTime = Date.now()
-            
+
             // Calculate mouse distance from center of screen
             const centerX = window.innerWidth / 2
             const centerY = window.innerHeight / 2
