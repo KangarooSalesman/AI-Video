@@ -1017,7 +1017,7 @@ function App() {
       'library': async () => {
         // Create HTML video element for the Universal Archive
         const video = document.createElement('video')
-        video.src = '/yessirz.mp4'
+        video.src = '/yessirz_optimized.mp4'
         video.crossOrigin = 'anonymous'
         video.muted = true
         video.loop = false
@@ -1089,6 +1089,22 @@ function App() {
           libraryMesh.userData.metadataLoaded = true
           videoTexture.needsUpdate = true
         })
+
+        // Keep the VideoTexture in sync with decoded frames for instant visual updates
+        try {
+          const anyVideo: any = video as any
+          if (typeof anyVideo.requestVideoFrameCallback === 'function') {
+            const onFrame = () => {
+              if (videoTexture) videoTexture.needsUpdate = true
+              anyVideo.requestVideoFrameCallback(onFrame)
+            }
+            anyVideo.requestVideoFrameCallback(onFrame)
+          } else {
+            // Fallback: mark texture dirty on seek/timeupdate
+            video.addEventListener('seeked', () => { if (videoTexture) videoTexture.needsUpdate = true })
+            video.addEventListener('timeupdate', () => { if (videoTexture) videoTexture.needsUpdate = true })
+          }
+        } catch (_) {}
 
         return [libraryMesh]
       },
@@ -1926,30 +1942,29 @@ function App() {
             const videoTexture = userData.videoTexture
             if (video) {
               const duration = isFinite(video.duration) && video.duration > 0 ? video.duration : 5
-              // Map mouse.x in [-1,1] to [0,1]
               const normX = (mouse.x + 1) * 0.5
-              const desiredTime = duration * normX
-              // Smoothly ease currentTime toward desiredTime
+              const desiredTime = Math.max(0, Math.min(duration, duration * normX))
               if (isFinite(desiredTime)) {
-                const currentTime = userData.lastTime ?? (isFinite(video.currentTime) ? video.currentTime : duration * 0.5)
-                const lerpAlpha = 0.15
-                const nextTime = currentTime + (desiredTime - currentTime) * lerpAlpha
-                const clamped = Math.max(0, Math.min(duration, nextTime))
-                // Throttle actual seeks to avoid frame-by-frame jumps
-                if (!userData._seekCooldownMs) userData._seekCooldownMs = 0
-                userData._seekCooldownMs -= dt * 1000
-                if (userData._seekCooldownMs <= 0 && Math.abs(clamped - (video.currentTime || 0)) > 0.02) {
+                const currentTime = isFinite(video.currentTime) ? video.currentTime : (duration * 0.5)
+                // Set time immediately when pointer moves enough
+                if (Math.abs(desiredTime - currentTime) > 0.003) {
                   try {
-                    video.currentTime = clamped
-                    userData.lastTime = clamped
-                    userData._seekCooldownMs = 33 // ~30 seeks per second max
+                    const anyVideo: any = video as any
+                    if (typeof anyVideo.fastSeek === 'function') {
+                      anyVideo.fastSeek(desiredTime)
+                    } else {
+                      video.currentTime = desiredTime
+                    }
+                    userData.lastTime = desiredTime
+                    // Texture will be marked via RVFC/seeked listener; keep a safety flag too
                     if (videoTexture) videoTexture.needsUpdate = true
                   } catch (e) {
                     // ignore seek errors while metadata not ready
                   }
-                } else {
-                  // Keep smoothed target cached
-                  userData.lastTime = clamped
+                }
+                // Ensure video stays paused during scrubbing
+                if (!video.paused) {
+                  try { video.pause() } catch (_) {}
                 }
               }
             }
