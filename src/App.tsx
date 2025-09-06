@@ -490,6 +490,7 @@ function App() {
     let pixelGroup: any
     let raycaster = new window.THREE.Raycaster()
     let mouseVector = new window.THREE.Vector2()
+    let lastFrameMs = performance.now()
 
     // Coordinate animation state
     let coordinateFadeStates: { [key: string]: { alpha: number, x: number, y: number, type: string, content?: string } } = {}
@@ -501,7 +502,6 @@ function App() {
 
     // Library (Universal Archive) mosaic state
     let libraryMesh: any
-    let libraryLastTriggerTime = 0
 
     const setupPixelsTexture = () => {
       columns = Math.floor(window.innerWidth / fontSize)
@@ -1015,119 +1015,81 @@ function App() {
       },
 
       'library': async () => {
-        // Load all reference images
-        const imagePaths = ['/1.png', '/2.png', '/3.png', '/4.png', '/5.png', '/6.jpg']
-        const textures = []
-        const imageInfos = []
+        // Create HTML video element for the Universal Archive
+        const video = document.createElement('video')
+        video.src = '/yessirz.mp4'
+        video.crossOrigin = 'anonymous'
+        video.muted = true
+        video.loop = false
+        video.preload = 'auto'
+        video.playsInline = true
 
-        for (const path of imagePaths) {
-          const imageData = await loadExternalImage(path)
-          const canvas = document.createElement('canvas')
-          canvas.width = imageData.width
-          canvas.height = imageData.height
-          const ctx = canvas.getContext('2d')!
+        // Create a VideoTexture from the video
+        const videoTexture = new window.THREE.VideoTexture(video)
+        videoTexture.minFilter = window.THREE.LinearFilter
+        videoTexture.magFilter = window.THREE.LinearFilter
+        videoTexture.generateMipmaps = false
 
-          // Create image data and copy pixels properly
-          const imgData = ctx.createImageData(canvas.width, canvas.height)
-          for (let i = 0; i < imageData.data.length; i += 3) {
-            const targetIndex = (i / 3) * 4
-            imgData.data[targetIndex] = imageData.data[i]     // R
-            imgData.data[targetIndex + 1] = imageData.data[i + 1] // G
-            imgData.data[targetIndex + 2] = imageData.data[i + 2] // B
-            imgData.data[targetIndex + 3] = 255 // A
-          }
-          ctx.putImageData(imgData, 0, 0)
-
-          const tex = new window.THREE.CanvasTexture(canvas)
-          tex.magFilter = window.THREE.LinearFilter
-          tex.minFilter = window.THREE.LinearFilter
-          tex.generateMipmaps = false
-          textures.push(tex)
-          imageInfos.push({
-            width: imageData.width,
-            height: imageData.height,
-            aspectRatio: imageData.width / imageData.height
-          })
-        }
-
-        // Create geometry that fits screen while maintaining first image's aspect ratio
-        const firstImageInfo = imageInfos[0]
+        // Default guess until metadata is available
+        let videoWidth = 1920
+        let videoHeight = 1080
         const screenAspectRatio = window.innerWidth / window.innerHeight
-        const imageAspectRatio = firstImageInfo.aspectRatio
 
-        // Scale to fit screen while maintaining aspect ratio
+        const computeSize = () => {
+          const aspect = videoWidth / videoHeight
         let width, height
-        if (imageAspectRatio > screenAspectRatio) {
-          // Image is wider than screen - fit to width
+          if (aspect > screenAspectRatio) {
           width = 10
-          height = width / imageAspectRatio
+            height = width / aspect
         } else {
-          // Image is taller than screen - fit to height
           height = 10
-          width = height * imageAspectRatio
+            width = height * aspect
+          }
+          return { width, height, aspect }
         }
 
-        const geometry = new window.THREE.PlaneGeometry(width, height)
-        const tex = textures[0] // Use first texture as initial
-
-        const material = new window.THREE.ShaderMaterial({
-          uniforms: {
-            uFromTexture: { value: tex },
-            uToTexture: { value: tex },
-            uProgress: { value: 0.0 },
-            uTileCount: { value: 64.0 },
-            uSeed: { value: Math.random() * 1000.0 }
-          },
-          vertexShader: `
-            varying vec2 vUv;
-            void main() {
-              vUv = uv;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-          `,
-          fragmentShader: `
-            precision highp float;
-            uniform sampler2D uFromTexture;
-            uniform sampler2D uToTexture;
-            uniform float uProgress;
-            uniform float uTileCount;
-            uniform float uSeed;
-            varying vec2 vUv;
-
-            float rand(vec2 co) {
-              return fract(sin(dot(co + uSeed, vec2(12.9898,78.233))) * 43758.5453);
-            }
-
-            void main() {
-              vec2 tiles = vec2(uTileCount, uTileCount);
-              vec2 tileCoord = floor(vUv * tiles);
-              vec2 tileCenterUv = (tileCoord + 0.5) / tiles;
-
-              float r = rand(tileCoord);
-              float tileProgress = smoothstep(0.0, 1.0, uProgress * 1.2 - r * 0.5);
-
-              vec2 sampleUv = mix(tileCenterUv, vUv, tileProgress);
-
-              // Sample both textures (geometry handles aspect ratio now)
-              vec4 fromColor = texture2D(uFromTexture, sampleUv);
-              vec4 toColor = texture2D(uToTexture, sampleUv);
-
-              vec4 color = mix(fromColor, toColor, uProgress);
-              gl_FragColor = color;
-            }
-          `,
-          transparent: false
-        })
+        const initial = computeSize()
+        const geometry = new window.THREE.PlaneGeometry(initial.width, initial.height)
+        const material = new window.THREE.MeshBasicMaterial({ map: videoTexture, transparent: false })
 
         libraryMesh = new window.THREE.Mesh(geometry, material)
         libraryMesh.userData = {
-          textures: textures,
-          imageInfos: imageInfos,
-          currentIndex: 0,
-          isTransitioning: false,
-          progressStartTime: 0,
-          transitionDurationMs: 2000
+          video,
+          videoTexture,
+          videoWidth,
+          videoHeight,
+          aspect: videoWidth / videoHeight,
+          baseWidth: initial.width,
+          baseHeight: initial.height,
+          enableImageTransitions: false,
+          metadataLoaded: false,
+          lastTime: 0
         }
+
+        // Center the video on load and update geometry to actual aspect ratio
+        video.addEventListener('loadedmetadata', () => {
+          videoWidth = video.videoWidth || videoWidth
+          videoHeight = video.videoHeight || videoHeight
+          libraryMesh.userData.videoWidth = videoWidth
+          libraryMesh.userData.videoHeight = videoHeight
+          libraryMesh.userData.aspect = videoWidth / videoHeight
+
+          const size = computeSize()
+          libraryMesh.geometry.dispose()
+          libraryMesh.geometry = new window.THREE.PlaneGeometry(size.width, size.height)
+          libraryMesh.userData.baseWidth = size.width
+          libraryMesh.userData.baseHeight = size.height
+
+          // Seek to midpoint and pause (we scrub via currentTime)
+          try {
+            const duration = isFinite(video.duration) && video.duration > 0 ? video.duration : 5
+            video.currentTime = duration * 0.5
+          } catch (e) {}
+          video.pause()
+          libraryMesh.userData.metadataLoaded = true
+          videoTexture.needsUpdate = true
+        })
+
         return [libraryMesh]
       },
 
@@ -1626,16 +1588,30 @@ function App() {
       const result = sceneInitializers[state]()
       const objects = result instanceof Promise ? await result : result
       objects.forEach((obj: any) => scene.add(obj))
+      // Reset rotation immediately when entering library
+      if (state === 'library') {
+        scene.rotation.x = 0
+        scene.rotation.y = 0
+      }
     }
 
     const animate = () => {
       requestAnimationFrame(animate)
+      const now = performance.now()
+      const dt = Math.min(0.05, Math.max(0.0, (now - lastFrameMs) / 1000))
+      lastFrameMs = now
       const objects = scene.children
 
-      // Apply camera rotation for all states
+      // Apply camera rotation for all states except 'library'
+      if (animationState !== 'library') {
       const targetRot = { x: mouse.y * 0.2, y: mouse.x * 0.2 }
       scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.05
       scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.05
+      } else {
+        // Smoothly return to zero rotation in library
+        scene.rotation.x += (0 - scene.rotation.x) * 0.08
+        scene.rotation.y += (0 - scene.rotation.y) * 0.08
+      }
 
       // Update mouse vector for raycasting
       mouseVector.set(mouse.x, mouse.y)
@@ -1944,14 +1920,37 @@ function App() {
           }
           break
         case 'library':
-          if (objects[0]) {
-            if (libraryMesh && libraryMesh.userData.isTransitioning) {
-              const now = Date.now()
-              const elapsed = (now - libraryMesh.userData.progressStartTime) / libraryMesh.userData.transitionDurationMs
-              const eased = Math.min(1.0, Math.max(0.0, elapsed))
-              libraryMesh.material.uniforms.uProgress.value = eased
-              if (eased >= 1.0) {
-                libraryMesh.userData.isTransitioning = false
+          if (objects[0] && libraryMesh && libraryMesh.userData) {
+            const userData = libraryMesh.userData
+            const video = userData.video as HTMLVideoElement
+            const videoTexture = userData.videoTexture
+            if (video) {
+              const duration = isFinite(video.duration) && video.duration > 0 ? video.duration : 5
+              // Map mouse.x in [-1,1] to [0,1]
+              const normX = (mouse.x + 1) * 0.5
+              const desiredTime = duration * normX
+              // Smoothly ease currentTime toward desiredTime
+              if (isFinite(desiredTime)) {
+                const currentTime = userData.lastTime ?? (isFinite(video.currentTime) ? video.currentTime : duration * 0.5)
+                const lerpAlpha = 0.15
+                const nextTime = currentTime + (desiredTime - currentTime) * lerpAlpha
+                const clamped = Math.max(0, Math.min(duration, nextTime))
+                // Throttle actual seeks to avoid frame-by-frame jumps
+                if (!userData._seekCooldownMs) userData._seekCooldownMs = 0
+                userData._seekCooldownMs -= dt * 1000
+                if (userData._seekCooldownMs <= 0 && Math.abs(clamped - (video.currentTime || 0)) > 0.02) {
+                  try {
+                    video.currentTime = clamped
+                    userData.lastTime = clamped
+                    userData._seekCooldownMs = 33 // ~30 seeks per second max
+                    if (videoTexture) videoTexture.needsUpdate = true
+                  } catch (e) {
+                    // ignore seek errors while metadata not ready
+                  }
+                } else {
+                  // Keep smoothed target cached
+                  userData.lastTime = clamped
+                }
               }
             }
           }
@@ -2186,53 +2185,8 @@ function App() {
           mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
         }
 
-        // Click handler for library image transitions
-        const handleClick = () => {
-          if (animationState === 'library') {
-            const now = Date.now()
-            if (libraryMesh && !libraryMesh.userData.isTransitioning && now - libraryLastTriggerTime > 250) {
-              libraryLastTriggerTime = now
-              const textures = libraryMesh.userData.textures as any[]
-              const imageInfos = libraryMesh.userData.imageInfos as any[]
-              if (textures && textures.length > 0 && imageInfos && imageInfos.length > 0) {
-                const currentIndex = libraryMesh.userData.currentIndex
-                const nextIndex = (currentIndex + 1) % textures.length
-                const nextImageInfo = imageInfos[nextIndex]
-
-                // Create new geometry for the next image's aspect ratio
-                const screenAspectRatio = window.innerWidth / window.innerHeight
-                const imageAspectRatio = nextImageInfo.aspectRatio
-
-                let width, height
-                if (imageAspectRatio > screenAspectRatio) {
-                  // Image is wider than screen - fit to width
-                  width = 10
-                  height = width / imageAspectRatio
-                } else {
-                  // Image is taller than screen - fit to height
-                  height = 10
-                  width = height * imageAspectRatio
-                }
-
-                const newGeometry = new window.THREE.PlaneGeometry(width, height)
-
-                // Set up transition from current to next texture
-                libraryMesh.material.uniforms.uFromTexture.value = textures[currentIndex]
-                libraryMesh.material.uniforms.uToTexture.value = textures[nextIndex]
-
-                // Update geometry
-                libraryMesh.geometry.dispose()
-                libraryMesh.geometry = newGeometry
-
-                libraryMesh.userData.currentIndex = nextIndex
-              }
-              libraryMesh.material.uniforms.uSeed.value = Math.random() * 1000.0
-              libraryMesh.material.uniforms.uProgress.value = 0.0
-              libraryMesh.userData.isTransitioning = true
-              libraryMesh.userData.progressStartTime = now
-            }
-          }
-        }
+        // Click handler (disabled for library video scene)
+        const handleClick = () => {}
 
         const handleResize = () => {
           camera.aspect = window.innerWidth / window.innerHeight
@@ -2246,6 +2200,25 @@ function App() {
           if(animationState === 'coordinates' && scene.children.length > 0) {
             setupCoordinatesTexture()
             scene.children[0].material.map = coordinatesTexture
+          }
+          // Resize library video plane to maintain aspect
+          if (animationState === 'library' && libraryMesh && libraryMesh.userData) {
+            const userData = libraryMesh.userData
+            const aspect = userData.aspect || (userData.videoWidth / userData.videoHeight) || (16/9)
+            const screenAspectRatio = window.innerWidth / window.innerHeight
+            let width, height
+            if (aspect > screenAspectRatio) {
+              width = 10
+              height = width / aspect
+            } else {
+              height = 10
+              width = height * aspect
+            }
+            const newGeometry = new window.THREE.PlaneGeometry(width, height)
+            libraryMesh.geometry.dispose()
+            libraryMesh.geometry = newGeometry
+            userData.baseWidth = width
+            userData.baseHeight = height
           }
         }
 
