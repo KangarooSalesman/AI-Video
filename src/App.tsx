@@ -1015,32 +1015,64 @@ function App() {
       },
 
       'library': async () => {
-        // Fullscreen plane with screen aspect
-        const screenAspectRatio = window.innerWidth / window.innerHeight
-        const height = 10
-        const width = height * screenAspectRatio
-        const geometry = new window.THREE.PlaneGeometry(width, height)
+        // Load all reference images
+        const imagePaths = ['/1.png', '/2.png', '/3.png', '/4.png', '/5.png', '/6.jpg']
+        const textures = []
+        const imageInfos = []
 
-        // Load reference image and create a CanvasTexture to preserve source pixels
-        const imageData = await loadExternalImage('/ζζ.jpg')
-        const canvas = document.createElement('canvas')
-        canvas.width = imageData.width
-        canvas.height = imageData.height
-        const ctx = canvas.getContext('2d')!
-        const imgData = ctx.createImageData(canvas.width, canvas.height)
-        for (let i = 0; i < imageData.data.length; i++) {
-          imgData.data[i * 4] = imageData.data[i * 3]
-          imgData.data[i * 4 + 1] = imageData.data[i * 3 + 1]
-          imgData.data[i * 4 + 2] = imageData.data[i * 3 + 2]
-          imgData.data[i * 4 + 3] = 255
+        for (const path of imagePaths) {
+          const imageData = await loadExternalImage(path)
+          const canvas = document.createElement('canvas')
+          canvas.width = imageData.width
+          canvas.height = imageData.height
+          const ctx = canvas.getContext('2d')!
+
+          // Create image data and copy pixels properly
+          const imgData = ctx.createImageData(canvas.width, canvas.height)
+          for (let i = 0; i < imageData.data.length; i += 3) {
+            const targetIndex = (i / 3) * 4
+            imgData.data[targetIndex] = imageData.data[i]     // R
+            imgData.data[targetIndex + 1] = imageData.data[i + 1] // G
+            imgData.data[targetIndex + 2] = imageData.data[i + 2] // B
+            imgData.data[targetIndex + 3] = 255 // A
+          }
+          ctx.putImageData(imgData, 0, 0)
+
+          const tex = new window.THREE.CanvasTexture(canvas)
+          tex.magFilter = window.THREE.LinearFilter
+          tex.minFilter = window.THREE.LinearFilter
+          tex.generateMipmaps = false
+          textures.push(tex)
+          imageInfos.push({
+            width: imageData.width,
+            height: imageData.height,
+            aspectRatio: imageData.width / imageData.height
+          })
         }
-        ctx.putImageData(imgData, 0, 0)
-        const tex = new window.THREE.CanvasTexture(canvas)
-        tex.magFilter = window.THREE.NearestFilter
-        tex.minFilter = window.THREE.LinearFilter
+
+        // Create geometry that fits screen while maintaining first image's aspect ratio
+        const firstImageInfo = imageInfos[0]
+        const screenAspectRatio = window.innerWidth / window.innerHeight
+        const imageAspectRatio = firstImageInfo.aspectRatio
+
+        // Scale to fit screen while maintaining aspect ratio
+        let width, height
+        if (imageAspectRatio > screenAspectRatio) {
+          // Image is wider than screen - fit to width
+          width = 10
+          height = width / imageAspectRatio
+        } else {
+          // Image is taller than screen - fit to height
+          height = 10
+          width = height * imageAspectRatio
+        }
+
+        const geometry = new window.THREE.PlaneGeometry(width, height)
+        const tex = textures[0] // Use first texture as initial
 
         const material = new window.THREE.ShaderMaterial({
           uniforms: {
+            uFromTexture: { value: tex },
             uToTexture: { value: tex },
             uProgress: { value: 0.0 },
             uTileCount: { value: 64.0 },
@@ -1055,6 +1087,7 @@ function App() {
           `,
           fragmentShader: `
             precision highp float;
+            uniform sampler2D uFromTexture;
             uniform sampler2D uToTexture;
             uniform float uProgress;
             uniform float uTileCount;
@@ -1074,7 +1107,12 @@ function App() {
               float tileProgress = smoothstep(0.0, 1.0, uProgress * 1.2 - r * 0.5);
 
               vec2 sampleUv = mix(tileCenterUv, vUv, tileProgress);
-              vec4 color = texture2D(uToTexture, sampleUv);
+
+              // Sample both textures (geometry handles aspect ratio now)
+              vec4 fromColor = texture2D(uFromTexture, sampleUv);
+              vec4 toColor = texture2D(uToTexture, sampleUv);
+
+              vec4 color = mix(fromColor, toColor, uProgress);
               gl_FragColor = color;
             }
           `,
@@ -1083,7 +1121,8 @@ function App() {
 
         libraryMesh = new window.THREE.Mesh(geometry, material)
         libraryMesh.userData = {
-          textures: [tex],
+          textures: textures,
+          imageInfos: imageInfos,
           currentIndex: 0,
           isTransitioning: false,
           progressStartTime: 0,
@@ -1592,8 +1631,9 @@ function App() {
     const animate = () => {
       requestAnimationFrame(animate)
       const objects = scene.children
-      const targetRot = { x: mouse.y * 0.2, y: mouse.x * 0.2 }
 
+      // Apply camera rotation for all states
+      const targetRot = { x: mouse.y * 0.2, y: mouse.x * 0.2 }
       scene.rotation.x += (targetRot.x - scene.rotation.x) * 0.05
       scene.rotation.y += (targetRot.y - scene.rotation.y) * 0.05
 
@@ -1905,7 +1945,6 @@ function App() {
           break
         case 'library':
           if (objects[0]) {
-            objects[0].rotation.y += 0.0001
             if (libraryMesh && libraryMesh.userData.isTransitioning) {
               const now = Date.now()
               const elapsed = (now - libraryMesh.userData.progressStartTime) / libraryMesh.userData.transitionDurationMs
@@ -2145,17 +2184,47 @@ function App() {
         const handleMouseMove = (e: MouseEvent) => {
           mouse.x = (e.clientX / window.innerWidth) * 2 - 1
           mouse.y = -(e.clientY / window.innerHeight) * 2 + 1
+        }
 
-          // Trigger mosaic -> image transition on hover during library scene
+        // Click handler for library image transitions
+        const handleClick = () => {
           if (animationState === 'library') {
             const now = Date.now()
             if (libraryMesh && !libraryMesh.userData.isTransitioning && now - libraryLastTriggerTime > 250) {
               libraryLastTriggerTime = now
               const textures = libraryMesh.userData.textures as any[]
-              if (textures && textures.length > 0) {
-                const nextIndex = (libraryMesh.userData.currentIndex + 1) % textures.length
-                libraryMesh.userData.currentIndex = nextIndex
+              const imageInfos = libraryMesh.userData.imageInfos as any[]
+              if (textures && textures.length > 0 && imageInfos && imageInfos.length > 0) {
+                const currentIndex = libraryMesh.userData.currentIndex
+                const nextIndex = (currentIndex + 1) % textures.length
+                const nextImageInfo = imageInfos[nextIndex]
+
+                // Create new geometry for the next image's aspect ratio
+                const screenAspectRatio = window.innerWidth / window.innerHeight
+                const imageAspectRatio = nextImageInfo.aspectRatio
+
+                let width, height
+                if (imageAspectRatio > screenAspectRatio) {
+                  // Image is wider than screen - fit to width
+                  width = 10
+                  height = width / imageAspectRatio
+                } else {
+                  // Image is taller than screen - fit to height
+                  height = 10
+                  width = height * imageAspectRatio
+                }
+
+                const newGeometry = new window.THREE.PlaneGeometry(width, height)
+
+                // Set up transition from current to next texture
+                libraryMesh.material.uniforms.uFromTexture.value = textures[currentIndex]
                 libraryMesh.material.uniforms.uToTexture.value = textures[nextIndex]
+
+                // Update geometry
+                libraryMesh.geometry.dispose()
+                libraryMesh.geometry = newGeometry
+
+                libraryMesh.userData.currentIndex = nextIndex
               }
               libraryMesh.material.uniforms.uSeed.value = Math.random() * 1000.0
               libraryMesh.material.uniforms.uProgress.value = 0.0
@@ -2181,6 +2250,7 @@ function App() {
         }
 
         window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('click', handleClick)
         window.addEventListener('resize', handleResize)
 
         // Setup initial textures
@@ -2197,6 +2267,7 @@ function App() {
         // Store for cleanup
         ;(window as any).threeCleanup = () => {
           window.removeEventListener('mousemove', handleMouseMove)
+          window.removeEventListener('click', handleClick)
           window.removeEventListener('resize', handleResize)
         }
       },
