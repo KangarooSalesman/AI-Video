@@ -490,7 +490,8 @@ function App() {
     let pixelGroup: any
     let raycaster = new window.THREE.Raycaster()
     let mouseVector = new window.THREE.Vector2()
-    let lastFrameMs = performance.now()
+    // Keep for potential future frame delta calculations
+    // Removed frame delta tracking for simplicity; not needed for current logic
 
     // Coordinate animation state
     let coordinateFadeStates: { [key: string]: { alpha: number, x: number, y: number, type: string, content?: string } } = {}
@@ -1024,11 +1025,38 @@ function App() {
         video.preload = 'auto'
         video.playsInline = true
 
-        // Create a VideoTexture from the video
-        const videoTexture = new window.THREE.VideoTexture(video)
-        videoTexture.minFilter = window.THREE.LinearFilter
-        videoTexture.magFilter = window.THREE.LinearFilter
-        videoTexture.generateMipmaps = false
+        // Prefer a downscaled CanvasTexture for smoother scrubbing (reduced GPU upload)
+        const useCanvasTexture = true
+        let videoTexture: any = null
+        let canvasTexture: any = null
+        let downscaleCanvas: HTMLCanvasElement | null = null
+        let downscaleCtx: CanvasRenderingContext2D | null = null
+
+        if (!useCanvasTexture) {
+          videoTexture = new window.THREE.VideoTexture(video)
+          videoTexture.minFilter = window.THREE.NearestFilter
+          videoTexture.magFilter = window.THREE.NearestFilter
+          videoTexture.generateMipmaps = false
+          if (typeof (videoTexture as any).anisotropy === 'number') {
+            ;(videoTexture as any).anisotropy = 1
+          }
+        } else {
+          downscaleCanvas = document.createElement('canvas')
+          // Initial conservative size; refined on metadata
+          downscaleCanvas.width = 320
+          downscaleCanvas.height = 180
+          downscaleCtx = downscaleCanvas.getContext('2d')
+          if (downscaleCtx) {
+            ;(downscaleCtx as any).imageSmoothingEnabled = false
+          }
+          canvasTexture = new window.THREE.CanvasTexture(downscaleCanvas)
+          canvasTexture.minFilter = window.THREE.NearestFilter
+          canvasTexture.magFilter = window.THREE.NearestFilter
+          canvasTexture.generateMipmaps = false
+          if (typeof (canvasTexture as any).anisotropy === 'number') {
+            ;(canvasTexture as any).anisotropy = 1
+          }
+        }
 
         // Default guess until metadata is available
         let videoWidth = 1920
@@ -1050,12 +1078,16 @@ function App() {
 
         const initial = computeSize()
         const geometry = new window.THREE.PlaneGeometry(initial.width, initial.height)
-        const material = new window.THREE.MeshBasicMaterial({ map: videoTexture, transparent: false })
+        const displayTexture = useCanvasTexture ? canvasTexture : videoTexture
+        const material = new window.THREE.MeshBasicMaterial({ map: displayTexture, transparent: false })
 
         libraryMesh = new window.THREE.Mesh(geometry, material)
         libraryMesh.userData = {
           video,
-          videoTexture,
+          videoTexture: displayTexture,
+          useCanvasTexture,
+          downscaleCanvas,
+          downscaleCtx,
           videoWidth,
           videoHeight,
           aspect: videoWidth / videoHeight,
@@ -1063,8 +1095,30 @@ function App() {
           baseHeight: initial.height,
           enableImageTransitions: false,
           metadataLoaded: false,
-          lastTime: 0
+          lastTime: 0,
+          // Smoothed, throttled scrubbing controller for butter-smooth response
+          scrub: {
+            targetTime: 0,
+            displayedTime: 0,
+            pending: false,
+            lastSeekAt: 0,
+            minSeekIntervalMs: 50, // rate-limit seeks a bit more to reduce thrash
+            quantizeStep: 1 / 15   // coarser time quantization (~15fps)
+          }
         }
+
+        // Release pending flag once a seek completes; also ensure texture refreshes
+        try {
+          video.addEventListener('seeked', () => {
+            if (libraryMesh && libraryMesh.userData && libraryMesh.userData.scrub) {
+              libraryMesh.userData.scrub.pending = false
+            }
+            try {
+              const tex = libraryMesh && libraryMesh.userData ? libraryMesh.userData.videoTexture : null
+              if (tex) tex.needsUpdate = true
+            } catch (_) {}
+          })
+        } catch (_) {}
 
         // Center the video on load and update geometry to actual aspect ratio
         video.addEventListener('loadedmetadata', () => {
@@ -1087,22 +1141,54 @@ function App() {
           } catch (e) {}
           video.pause()
           libraryMesh.userData.metadataLoaded = true
-          videoTexture.needsUpdate = true
+          if (libraryMesh.userData.scrub) {
+            libraryMesh.userData.scrub.displayedTime = video.currentTime
+          }
+          try {
+            if (useCanvasTexture && downscaleCanvas && downscaleCtx) {
+              // Resize downscale canvas to maintain aspect, cap width to 320
+              const maxW = 320
+              const scale = Math.min(1, maxW / (video.videoWidth || 640))
+              downscaleCanvas.width = Math.max(1, Math.round((video.videoWidth || 640) * scale))
+              downscaleCanvas.height = Math.max(1, Math.round((video.videoHeight || 360) * scale))
+              try { ;(downscaleCtx as any).imageSmoothingEnabled = false } catch (_) {}
+            }
+          } catch (_) {}
+          try {
+            const tex = libraryMesh && libraryMesh.userData ? libraryMesh.userData.videoTexture : null
+            if (tex) tex.needsUpdate = true
+          } catch (_) {}
         })
 
-        // Keep the VideoTexture in sync with decoded frames for instant visual updates
+        // Keep the display texture in sync with decoded frames for instant visual updates
         try {
           const anyVideo: any = video as any
           if (typeof anyVideo.requestVideoFrameCallback === 'function') {
             const onFrame = () => {
-              if (videoTexture) videoTexture.needsUpdate = true
+              try {
+                if (useCanvasTexture && downscaleCanvas && downscaleCtx) {
+                  // Draw current video frame to smaller canvas then upload
+                  downscaleCtx.drawImage(video, 0, 0, downscaleCanvas.width, downscaleCanvas.height)
+                }
+                const tex = libraryMesh && libraryMesh.userData ? libraryMesh.userData.videoTexture : null
+                if (tex) tex.needsUpdate = true
+              } catch (_) {}
               anyVideo.requestVideoFrameCallback(onFrame)
             }
             anyVideo.requestVideoFrameCallback(onFrame)
           } else {
             // Fallback: mark texture dirty on seek/timeupdate
-            video.addEventListener('seeked', () => { if (videoTexture) videoTexture.needsUpdate = true })
-            video.addEventListener('timeupdate', () => { if (videoTexture) videoTexture.needsUpdate = true })
+            const mark = () => {
+              try {
+                if (useCanvasTexture && downscaleCanvas && downscaleCtx) {
+                  downscaleCtx.drawImage(video, 0, 0, downscaleCanvas.width, downscaleCanvas.height)
+                }
+                const tex = libraryMesh && libraryMesh.userData ? libraryMesh.userData.videoTexture : null
+                if (tex) tex.needsUpdate = true
+              } catch (_) {}
+            }
+            video.addEventListener('seeked', mark)
+            video.addEventListener('timeupdate', mark)
           }
         } catch (_) {}
 
@@ -1613,9 +1699,7 @@ function App() {
 
     const animate = () => {
       requestAnimationFrame(animate)
-      const now = performance.now()
-      const dt = Math.min(0.05, Math.max(0.0, (now - lastFrameMs) / 1000))
-      lastFrameMs = now
+      // No per-frame timing needed for current logic
       const objects = scene.children
 
       // Apply camera rotation for all states except 'library'
@@ -1940,28 +2024,46 @@ function App() {
             const userData = libraryMesh.userData
             const video = userData.video as HTMLVideoElement
             const videoTexture = userData.videoTexture
-            if (video) {
+            const scrub = userData.scrub
+            if (video && scrub) {
               const duration = isFinite(video.duration) && video.duration > 0 ? video.duration : 5
               const normX = (mouse.x + 1) * 0.5
-              const desiredTime = Math.max(0, Math.min(duration, duration * normX))
+              // Compute desired target time from mouse X
+              let desiredTime = Math.max(0, Math.min(duration, duration * normX))
               if (isFinite(desiredTime)) {
-                const currentTime = isFinite(video.currentTime) ? video.currentTime : (duration * 0.5)
-                // Set time immediately when pointer moves enough
-                if (Math.abs(desiredTime - currentTime) > 0.003) {
+                // Quantize to ~30fps to reduce decoder thrash
+                const step = scrub.quantizeStep || (1 / 30)
+                desiredTime = Math.round(desiredTime / step) * step
+
+                // Snap aggressively on big jumps; otherwise smooth for stability
+                const bigJump = Math.abs(scrub.displayedTime - desiredTime) > (0.25)
+                const alpha = bigJump ? 1.0 : 0.7
+                scrub.targetTime = desiredTime
+                scrub.displayedTime = scrub.displayedTime + (scrub.targetTime - scrub.displayedTime) * alpha
+
+                const now = performance.now()
+                const canSeek = !scrub.pending && (now - scrub.lastSeekAt) >= scrub.minSeekIntervalMs
+
+                // Only trigger a seek if far enough from current decoded frame and we are allowed
+                const deltaFromVideo = Math.abs((isFinite(video.currentTime) ? video.currentTime : 0) - scrub.displayedTime)
+                if (canSeek && deltaFromVideo > (step * 0.5)) {
                   try {
+                    const t = Math.max(0, Math.min(duration, scrub.displayedTime))
                     const anyVideo: any = video as any
+                    scrub.pending = true
+                    scrub.lastSeekAt = now
                     if (typeof anyVideo.fastSeek === 'function') {
-                      anyVideo.fastSeek(desiredTime)
+                      anyVideo.fastSeek(t)
                     } else {
-                      video.currentTime = desiredTime
+                      video.currentTime = t
                     }
-                    userData.lastTime = desiredTime
-                    // Texture will be marked via RVFC/seeked listener; keep a safety flag too
+                    userData.lastTime = t
                     if (videoTexture) videoTexture.needsUpdate = true
                   } catch (e) {
-                    // ignore seek errors while metadata not ready
+                    scrub.pending = false
                   }
                 }
+
                 // Ensure video stays paused during scrubbing
                 if (!video.paused) {
                   try { video.pause() } catch (_) {}
@@ -2237,7 +2339,11 @@ function App() {
           }
         }
 
-        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('pointermove', handleMouseMove, { passive: true } as any)
+        // On supporting browsers, pointerrawupdate provides lower-latency uncoalesced events
+        try {
+          window.addEventListener('pointerrawupdate' as any, handleMouseMove as any, { passive: true } as any)
+        } catch (_) {}
         window.addEventListener('click', handleClick)
         window.addEventListener('resize', handleResize)
 
@@ -2254,7 +2360,8 @@ function App() {
 
         // Store for cleanup
         ;(window as any).threeCleanup = () => {
-          window.removeEventListener('mousemove', handleMouseMove)
+          window.removeEventListener('pointermove', handleMouseMove)
+          try { window.removeEventListener('pointerrawupdate' as any, handleMouseMove as any) } catch (_) {}
           window.removeEventListener('click', handleClick)
           window.removeEventListener('resize', handleResize)
         }
